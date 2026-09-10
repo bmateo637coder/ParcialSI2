@@ -45,6 +45,7 @@ class Product(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text)
     base_price = Column(Float, nullable=False)
+    image_url = Column(String(500), nullable=True)
     
     # Claves foráneas (Relaciones)
     category_id = Column(Integer, ForeignKey("categories.id"))
@@ -71,7 +72,21 @@ class ProductVariant(Base):
     size_id = Column(Integer, ForeignKey("sizes.id"), nullable=False)
     color_id = Column(Integer, ForeignKey("colors.id"), nullable=False)
     sku = Column(String(100), unique=True, index=True) # Código de inventario único
+    price = Column(Float, nullable=True)  # Precio específico (si difiere del base)
+    stock = Column(Integer, nullable=False, default=0)
 
     product = relationship("Product", back_populates="variants")
     size = relationship("Size")
     color = relationship("Color")
+
+    @property
+    def effective_price(self) -> float:
+        return self.price if self.price is not None else self.product.base_price
+
+    @property
+    def size_name(self) -> str | None:
+        return self.size.name if self.size else None
+
+    @property
+    def color_name(self) -> str | None:
+        return self.color.name if self.color else None
