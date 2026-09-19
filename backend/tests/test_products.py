@@ -102,3 +102,190 @@ def test_variant_flow(client, auth_headers):
 
     client.delete(f"/api/products/variants/{body['id']}", headers=auth_headers)
     assert variant.status_code == 201
+
+
+# ======================================================================
+# Colecciones (CU8 ampliado)
+# ======================================================================
+
+
+def test_metadata_collections_public(client):
+    res = client.get("/api/products/metadata/collections")
+    assert res.status_code == 200
+    assert isinstance(res.json(), list)
+
+
+def test_create_and_list_collection(client, auth_headers):
+    season = client.post(
+        "/api/products/catalog/seasons",
+        json={"name": "Verano Test", "year": 2026, "is_active": True},
+        headers=auth_headers,
+    ).json()
+
+    res = client.post(
+        "/api/products/catalog/collections",
+        json={"name": "Colección Test", "season_id": season["id"]},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201
+    assert res.json()["season_id"] == season["id"]
+
+    meta = client.get("/api/products/metadata/collections").json()
+    assert any(c["name"] == "Colección Test" for c in meta)
+
+
+def test_create_collection_invalid_season(client, auth_headers):
+    res = client.post(
+        "/api/products/catalog/collections",
+        json={"name": "Bad", "season_id": 999999},
+        headers=auth_headers,
+    )
+    assert res.status_code == 400
+
+
+def test_update_and_deactivate_collection(client, auth_headers):
+    collection = client.post(
+        "/api/products/catalog/collections",
+        json={"name": "Colección Edit", "is_active": True},
+        headers=auth_headers,
+    ).json()
+
+    res = client.patch(
+        f"/api/products/catalog/collections/{collection['id']}",
+        json={"name": "Colección Renombrada"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["name"] == "Colección Renombrada"
+
+    assert client.delete(
+        f"/api/products/catalog/collections/{collection['id']}", headers=auth_headers
+    ).status_code == 204
+
+
+def test_update_collection_invalid_season(client, auth_headers):
+    collection = client.post(
+        "/api/products/catalog/collections",
+        json={"name": "Colección Bad Season"},
+        headers=auth_headers,
+    ).json()
+    res = client.patch(
+        f"/api/products/catalog/collections/{collection['id']}",
+        json={"season_id": 999999},
+        headers=auth_headers,
+    )
+    assert res.status_code == 400
+
+
+# ======================================================================
+# Proveedores (CU9 completado)
+# ======================================================================
+
+
+def test_provider_create_update_delete(client, auth_headers):
+    provider = client.post(
+        "/api/products/catalog/providers",
+        json={"name": "Proveedor Test", "contact_email": "p@test.com", "nit": "8888888",
+              "phone": "+591 111", "address": "Calle 99"},
+        headers=auth_headers,
+    ).json()
+    assert provider["nit"] == "8888888"
+
+    updated = client.patch(
+        f"/api/products/catalog/providers/{provider['id']}",
+        json={"phone": "+591 222"},
+        headers=auth_headers,
+    ).json()
+    assert updated["phone"] == "+591 222"
+
+    assert client.delete(
+        f"/api/products/catalog/providers/{provider['id']}", headers=auth_headers
+    ).status_code == 204
+
+
+def test_provider_update_404(client, auth_headers):
+    res = client.patch("/api/products/catalog/providers/999999", json={"phone": "x"}, headers=auth_headers)
+    assert res.status_code == 404
+
+
+# ======================================================================
+# Temporadas (CU8)
+# ======================================================================
+
+
+def test_season_update_and_deactivate(client, auth_headers):
+    season = client.post(
+        "/api/products/catalog/seasons",
+        json={"name": "Temporada Test", "year": 2026, "description": "x", "is_active": True},
+        headers=auth_headers,
+    ).json()
+
+    res = client.patch(
+        f"/api/products/catalog/seasons/{season['id']}",
+        json={"description": "Actualizado"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["description"] == "Actualizado"
+
+    assert client.delete(
+        f"/api/products/catalog/seasons/{season['id']}", headers=auth_headers
+    ).status_code == 204
+
+
+def test_season_update_404(client, auth_headers):
+    res = client.patch("/api/products/catalog/seasons/999999", json={"description": "x"}, headers=auth_headers)
+    assert res.status_code == 404
+
+
+# ======================================================================
+# Filtros y visibilidad (is_active)
+# ======================================================================
+
+
+def test_product_filters_by_collection_and_provider(client, auth_headers):
+    season = client.post(
+        "/api/products/catalog/seasons",
+        json={"name": "Filtro Season", "year": 2026},
+        headers=auth_headers,
+    ).json()
+    collection = client.post(
+        "/api/products/catalog/collections",
+        json={"name": "Filtro Colección", "season_id": season["id"]},
+        headers=auth_headers,
+    ).json()
+    provider = client.post(
+        "/api/products/catalog/providers",
+        json={"name": "Filtro Proveedor"},
+        headers=auth_headers,
+    ).json()
+
+    product = client.post(
+        "/api/products/",
+        json={"name": "Producto Filtro", "base_price": 150,
+              "season_id": season["id"], "collection_id": collection["id"], "provider_id": provider["id"]},
+        headers=auth_headers,
+    ).json()
+
+    data = client.get(f"/api/products/?collection_id={collection['id']}").json()
+    assert any(p["id"] == product["id"] for p in data)
+
+    data = client.get(f"/api/products/?provider_id={provider['id']}").json()
+    assert any(p["id"] == product["id"] for p in data)
+
+
+def test_product_soft_delete_hidden_by_default(client, auth_headers):
+    product = client.post("/api/products/", json={"name": "Temporal Oculto", "base_price": 1},
+                          headers=auth_headers).json()
+    client.delete(f"/api/products/{product['id']}", headers=auth_headers)
+
+    assert not any(p["id"] == product["id"] for p in client.get("/api/products/").json())
+
+
+def test_include_inactive_products(client, auth_headers):
+    product = client.post("/api/products/", json={"name": "Inactivo Visible", "base_price": 2},
+                          headers=auth_headers).json()
+    client.delete(f"/api/products/{product['id']}", headers=auth_headers)
+
+    data = client.get("/api/products/?include_inactive=true").json()
+    assert any(p["id"] == product["id"] for p in data)

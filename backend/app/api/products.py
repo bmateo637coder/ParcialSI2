@@ -1,12 +1,14 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import require_admin
 from app.models.catalog import (
     Category,
+    Collection,
     Color,
     Product,
     ProductVariant,
@@ -17,6 +19,9 @@ from app.models.catalog import (
 from app.schemas import (
     CategoryCreate,
     CategoryResponse,
+    CollectionCreate,
+    CollectionResponse,
+    CollectionUpdate,
     ColorCreate,
     ColorResponse,
     ProductCreate,
@@ -24,8 +29,10 @@ from app.schemas import (
     ProductUpdate,
     ProviderCreate,
     ProviderResponse,
+    ProviderUpdate,
     SeasonCreate,
     SeasonResponse,
+    SeasonUpdate,
     SizeCreate,
     SizeResponse,
     VariantCreate,
@@ -53,9 +60,14 @@ def get_products(
     q: Optional[str] = None,
     category_id: Optional[int] = None,
     season_id: Optional[int] = None,
+    collection_id: Optional[int] = None,
+    provider_id: Optional[int] = None,
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
 ):
     query = db.query(Product)
+    if not include_inactive:
+        query = query.filter(Product.is_active.is_(True))
     if q:
         like = f"%{q.strip()}%"
         query = query.filter(Product.name.ilike(like) | Product.description.ilike(like))
@@ -63,12 +75,19 @@ def get_products(
         query = query.filter(Product.category_id == category_id)
     if season_id:
         query = query.filter(Product.season_id == season_id)
+    if collection_id:
+        query = query.filter(Product.collection_id == collection_id)
+    if provider_id:
+        query = query.filter(Product.provider_id == provider_id)
     return query.order_by(Product.created_at.desc()).all()
 
 
 @router.get("/{product_id}", response_model=ProductResponse, summary="Obtener un producto")
-def get_product(product_id: int, db: Session = Depends(get_db)):
-    return _get_product_or_404(db, product_id)
+def get_product(product_id: int, include_inactive: bool = False, db: Session = Depends(get_db)):
+    product = _get_product_or_404(db, product_id)
+    if not include_inactive and not product.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
+    return product
 
 
 @router.post(
@@ -116,7 +135,7 @@ def update_product(
 )
 def delete_product(product_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
     product = _get_product_or_404(db, product_id)
-    db.delete(product)
+    product.is_active = False
     db.commit()
 
 
@@ -241,6 +260,11 @@ def get_providers(db: Session = Depends(get_db)):
     return db.query(Provider).order_by(Provider.name).all()
 
 
+@router.get("/metadata/collections", response_model=list[CollectionResponse], summary="Colecciones")
+def get_collections(db: Session = Depends(get_db)):
+    return db.query(Collection).order_by(Collection.name).all()
+
+
 # ======================================================================
 # CATALOG REFERENCE CREATE (admin)
 # ======================================================================
@@ -311,6 +335,139 @@ def create_color(payload: ColorCreate, _admin=Depends(require_admin), db: Sessio
 def create_provider(payload: ProviderCreate, _admin=Depends(require_admin), db: Session = Depends(get_db)):
     provider = Provider(**payload.model_dump())
     db.add(provider)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un proveedor con ese NIT")
     db.refresh(provider)
     return provider
+
+
+# ======================================================================
+# CATALOG REFERENCE UPDATE/DELETE (admin)
+# ======================================================================
+
+
+def _get_model_or_404(db: Session, model, model_id: int, label: str):
+    obj = db.get(model, model_id)
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} no encontrado")
+    return obj
+
+
+@router.patch(
+    "/catalog/seasons/{season_id}",
+    response_model=SeasonResponse,
+    summary="Actualizar temporada (admin)",
+)
+def update_season(
+    season_id: int,
+    payload: SeasonUpdate,
+    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    season = _get_model_or_404(db, Season, season_id, "Temporada")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(season, field, value)
+    db.commit()
+    db.refresh(season)
+    return season
+
+
+@router.delete(
+    "/catalog/seasons/{season_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Desactivar temporada (admin)",
+)
+def delete_season(season_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
+    season = _get_model_or_404(db, Season, season_id, "Temporada")
+    season.is_active = False
+    db.commit()
+
+
+@router.post(
+    "/catalog/collections",
+    response_model=CollectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear colección (admin)",
+)
+def create_collection(
+    payload: CollectionCreate,
+    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if payload.season_id and not db.get(Season, payload.season_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Temporada inválida")
+    collection = Collection(**payload.model_dump())
+    db.add(collection)
+    db.commit()
+    db.refresh(collection)
+    return collection
+
+
+@router.patch(
+    "/catalog/collections/{collection_id}",
+    response_model=CollectionResponse,
+    summary="Actualizar colección (admin)",
+)
+def update_collection(
+    collection_id: int,
+    payload: CollectionUpdate,
+    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    collection = _get_model_or_404(db, Collection, collection_id, "Colección")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("season_id") and not db.get(Season, data["season_id"]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Temporada inválida")
+    for field, value in data.items():
+        setattr(collection, field, value)
+    db.commit()
+    db.refresh(collection)
+    return collection
+
+
+@router.delete(
+    "/catalog/collections/{collection_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Desactivar colección (admin)",
+)
+def delete_collection(collection_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
+    collection = _get_model_or_404(db, Collection, collection_id, "Colección")
+    collection.is_active = False
+    db.commit()
+
+
+@router.patch(
+    "/catalog/providers/{provider_id}",
+    response_model=ProviderResponse,
+    summary="Actualizar proveedor (admin)",
+)
+def update_provider(
+    provider_id: int,
+    payload: ProviderUpdate,
+    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    provider = _get_model_or_404(db, Provider, provider_id, "Proveedor")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(provider, field, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un proveedor con ese NIT")
+    db.refresh(provider)
+    return provider
+
+
+@router.delete(
+    "/catalog/providers/{provider_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Desactivar proveedor (admin)",
+)
+def delete_provider(provider_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
+    provider = _get_model_or_404(db, Provider, provider_id, "Proveedor")
+    provider.is_active = False
+    db.commit()

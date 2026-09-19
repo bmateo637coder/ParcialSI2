@@ -339,6 +339,21 @@ a:hover { color: var(--accent-dark); }
 textarea.form-control { min-height: 90px; resize: vertical; }
 
 .form-error { color: var(--danger); font-size: 0.8rem; margin-top: 0.35rem; }
+.success-note { color: var(--success, #2e7d32); font-size: 0.9rem; margin: 0.25rem 0; }
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--accent-dark);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--ink); }
+
+.checkbox-inline { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 640px) { .form-row { grid-template-columns: 1fr; } }
@@ -385,6 +400,7 @@ textarea.form-control { min-height: 90px; resize: vertical; }
 .badge-success { background: var(--success-soft); color: var(--success); }
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
 .badge-info { background: var(--info-soft); color: var(--info); }
+.badge-warning { background: rgba(183, 121, 31, 0.12); color: #9a5e10; }
 
 .stock-ok { color: var(--success); font-weight: 600; }
 .stock-low { color: #b7791f; font-weight: 600; }
@@ -489,6 +505,9 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   gap: 0.15rem;
 }
 .variant-item .v-tags { font-size: 0.8rem; color: var(--muted); }
+.variant-item.variant-selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(184, 145, 76, 0.15); }
+.variant-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.variant-item:hover:not(:disabled) { border-color: var(--accent); }
 
 /* ============================================================
    Sucursales
@@ -590,6 +609,18 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   vertical-align: -0.2em;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   Historial de pedidos (CU26)
+   ============================================================ */
+.order-list { display: flex; flex-direction: column; gap: 1rem; }
+.order-item { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.25rem; background: var(--surface); }
+.order-head { display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; }
+.order-items { margin-top: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+.order-item-row { display: flex; align-items: center; gap: .8rem; font-size: .9rem; }
+.order-item-row .qty { color: var(--muted); margin-left: auto; }
+.order-item-row .amt { min-width: 90px; text-align: right; font-weight: 600; }
+.order-total { margin-top: .75rem; text-align: right; font-size: .95rem; border-top: 1px dashed var(--line); padding-top: .6rem; }
 
 @media (max-width: 768px) {
   .navbar { padding: 0 1rem; flex-wrap: wrap; gap: 0.4rem; }

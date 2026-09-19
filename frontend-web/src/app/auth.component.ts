@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ApiService } from './api.service';
+import { ToastService } from './toast.service';
 
 @Component({
   selector: 'app-auth',
@@ -31,6 +32,9 @@ import { ApiService } from './api.service';
         <div class="form-group">
           <label class="form-label">Contraseña</label>
           <input class="form-control" type="password" [(ngModel)]="loginData.password" name="loginPassword" placeholder="Tu contraseña" required>
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="button" class="link-btn" (click)="mode = 'forgot'">¿Olvidaste tu contraseña?</button>
         </div>
         <button class="btn btn-accent btn-block" type="submit" [disabled]="loading">
           <span *ngIf="loading" class="spinner"></span>
@@ -65,18 +69,65 @@ import { ApiService } from './api.service';
         </button>
       </form>
 
+      <!-- OLVIDÉ MI CONTRASEÑA -->
+      <div *ngIf="mode === 'forgot'">
+        <div class="form-group" *ngIf="!resetToken">
+          <p style="color:var(--muted); font-size:.9rem; margin-bottom:1rem;">
+            Escribe tu correo y te enviaremos un enlace para restablecer tu contraseña.
+            <em>Modo demo: el código se muestra en pantalla.</em>
+          </p>
+          <label class="form-label">Correo electrónico</label>
+          <input class="form-control" type="email" [(ngModel)]="forgotEmail" name="forgotEmail" placeholder="ejemplo@correo.com">
+          <button class="btn btn-accent btn-block" style="margin-top:1rem;" (click)="requestReset()" [disabled]="loading || !forgotEmail">
+            <span *ngIf="loading" class="spinner"></span>
+            Enviar enlace de recuperación
+          </button>
+        </div>
+
+        <div *ngIf="resetToken">
+          <p style="color:var(--muted); font-size:.9rem; margin-bottom:1rem;">
+            Ingresa el código de recuperación y tu nueva contraseña.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Código de recuperación</label>
+            <textarea class="form-control" [(ngModel)]="resetToken" name="resetToken" rows="3" readonly></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nueva contraseña</label>
+            <input class="form-control" type="password" [(ngModel)]="newPassword" name="newPassword" placeholder="Mínimo 6 caracteres">
+            <div class="form-error" *ngIf="newPassword && newPassword.length < 6">La contraseña debe tener al menos 6 caracteres.</div>
+          </div>
+          <div class="form-group" *ngIf="resetMessage">
+            <p class="success-note">{{ resetMessage }}</p>
+          </div>
+          <button class="btn btn-accent btn-block" (click)="confirmReset()" [disabled]="loading || !resetToken || newPassword.length < 6">
+            <span *ngIf="loading" class="spinner"></span>
+            Restablecer contraseña
+          </button>
+          <button class="btn btn-outline btn-block" style="margin-top:.75rem;" (click)="backToLogin()">Volver a iniciar sesión</button>
+        </div>
+
+        <div *ngIf="!resetToken" style="margin-top:.75rem;">
+          <button class="btn btn-outline btn-block" (click)="mode = 'login'">Volver a iniciar sesión</button>
+        </div>
+      </div>
+
       <p class="auth-note">Cuenta demo admin: <strong>admin@fashionstore.com / admin123</strong></p>
     </div>
   </div>
   `,
 })
 export class AuthComponent {
-  mode: 'login' | 'register' = 'login';
+  mode: 'login' | 'register' | 'forgot' = 'login';
   loading = false;
   loginData = { email: '', password: '' };
   regData = { first_name: '', last_name: '', email: '', password: '' };
+  forgotEmail = '';
+  resetToken = '';
+  newPassword = '';
+  resetMessage = '';
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(private api: ApiService, private router: Router, private toast: ToastService) {}
 
   get validRegistration(): boolean {
     return !!(
@@ -131,5 +182,45 @@ export class AuthComponent {
       },
       error: () => (this.loading = false),
     });
+  }
+
+  requestReset(): void {
+    if (!this.forgotEmail) return;
+    this.loading = true;
+    this.resetMessage = '';
+    this.api.forgotPassword(this.forgotEmail).subscribe({
+      next: (res) => {
+        this.loading = false;
+        this.resetToken = res.reset_token || '';
+        if (!this.resetToken) {
+          this.resetMessage = res.message;
+        }
+      },
+      error: () => (this.loading = false),
+    });
+  }
+
+  confirmReset(): void {
+    if (!this.resetToken || this.newPassword.length < 6) return;
+    this.loading = true;
+    this.api.resetPassword(this.resetToken.trim(), this.newPassword).subscribe({
+      next: (res) => {
+        this.loading = false;
+        this.resetMessage = res.message;
+        this.resetToken = '';
+        this.newPassword = '';
+        this.mode = 'login';
+        this.toast.success(res.message);
+      },
+      error: () => (this.loading = false),
+    });
+  }
+
+  backToLogin(): void {
+    this.resetToken = '';
+    this.newPassword = '';
+    this.resetMessage = '';
+    this.forgotEmail = '';
+    this.mode = 'login';
   }
 }

@@ -14,9 +14,11 @@ from app.models.catalog import (
     Product,
     ProductVariant,
     Provider,
+    ProviderAccount,
     Season,
     Size,
 )
+from app.models.inventory import Inventory, InventoryMovement
 from app.models.user import Role, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -51,46 +53,59 @@ def seed_db():
         db.commit()
         print("Roles listos.")
 
-        admin_role = db.query(Role).filter(Role.name == "Administrador").first()
-        cliente_role = db.query(Role).filter(Role.name == "Cliente").first()
+        role = {r.name: r.id for r in db.query(Role).all()}
 
         # ------------------------------------------------------------------
-        # Usuarios
+        # Usuarios (uno por rol + clientes de prueba)
         # ------------------------------------------------------------------
-        admin = _first_or_create(
-            db, User,
-            first_name="Admin", last_name="Principal",
-            email="admin@fashionstore.com",
-        )
-        if not admin.hashed_password:
-            admin.hashed_password = pwd_context.hash("admin123")
-        admin.role_id = admin_role.id
-
-        cliente = _first_or_create(
-            db, User,
-            first_name="María", last_name="Gonzales",
-            email="cliente@fashionstore.com",
-        )
-        if not cliente.hashed_password:
-            cliente.hashed_password = pwd_context.hash("cliente123")
-        cliente.role_id = cliente_role.id
+        users = [
+            dict(first_name="Admin", last_name="Principal", email="admin@fashionstore.com",
+                 password="admin123", role="Administrador", phone="+591 700 000 001"),
+            dict(first_name="María", last_name="Gonzales", email="cliente@fashionstore.com",
+                 password="cliente123", role="Cliente", phone="+591 700 000 002"),
+            dict(first_name="Carlos", last_name="Rojas", email="cliente2@fashionstore.com",
+                 password="cliente123", role="Cliente", phone="+591 700 000 003"),
+            dict(first_name="Lucía", last_name="Fernández", email="cajero@fashionstore.com",
+                 password="cajero123", role="Cajero", phone="+591 700 000 004"),
+            dict(first_name="Jorge", last_name="Quispe", email="encargado@fashionstore.com",
+                 password="encargado123", role="Encargado de Sucursal", phone="+591 700 000 005"),
+            dict(first_name="Inés", last_name="Mamani", email="proveedor@fashionstore.com",
+                 password="proveedor123", role="Proveedor", phone="+591 700 000 006"),
+        ]
+        for u in users:
+            user = _first_or_create(db, User, email=u["email"])
+            user.first_name = u["first_name"]
+            user.last_name = u["last_name"]
+            user.phone = u["phone"]
+            if not user.hashed_password:
+                user.hashed_password = pwd_context.hash(u["password"])
+            user.role_id = role[u["role"]]
+            user.is_active = True
         db.commit()
-        print("Usuarios listos. Admin: admin@fashionstore.com / admin123")
+        print("Usuarios listos: admin@fashionstore.com / admin123 · cliente@fashionstore.com / cliente123")
 
         # ------------------------------------------------------------------
         # Catálogo base
         # ------------------------------------------------------------------
-        categories = ["Mujer", "Hombre", "Accesorios", "Casual"]
-        for name in categories:
+        for name in ["Mujer", "Hombre", "Accesorios", "Casual"]:
             _first_or_create(db, Category, name=name)
         db.commit()
 
-        seasons = {
-            "Primavera-Verano 2026": None,
-            "Otoño-Invierno 2026": None,
-        }
-        for name in seasons:
-            _first_or_create(db, Season, name=name)
+        seasons_data = [
+            dict(name="Primavera-Verano 2026", year=2026,
+                 description="Colección cálida con tejidos ligeros",
+                 start_date="2026-09-21", end_date="2027-03-20"),
+            dict(name="Otoño-Invierno 2026", year=2026,
+                 description="Prendas abrigadas para temporada fría",
+                 start_date="2026-03-21", end_date="2026-09-20"),
+        ]
+        for s in seasons_data:
+            season = _first_or_create(db, Season, name=s["name"])
+            season.year = s["year"]
+            season.description = s["description"]
+            season.start_date = s["start_date"]
+            season.end_date = s["end_date"]
+            season.is_active = True
         db.commit()
 
         for size in ["XS", "S", "M", "L", "XL", "XXL", "34", "36", "38", "40", "42"]:
@@ -101,20 +116,40 @@ def seed_db():
             _first_or_create(db, Color, name=color)
         db.commit()
 
-        providers = {
-            "Confex S.R.L.": "ventas@confex.bo",
-            "Textiles Andinos": "contacto@textilesandinos.bo",
-            "Moda Latina": "info@modalatina.bo",
-        }
-        for name, email in providers.items():
-            _first_or_create(db, Provider, name=name, contact_email=email)
+        providers_data = [
+            dict(name="Confex S.R.L.", contact_email="ventas@confex.bo", nit="1234567012",
+                 phone="+591 3 335 8899", address="Av. Monseñor Rivero 500, Santa Cruz"),
+            dict(name="Textiles Andinos", contact_email="contacto@textilesandinos.bo", nit="9876543012",
+                 phone="+591 2 244 1122", address="Calle México 850, La Paz"),
+            dict(name="Moda Latina", contact_email="info@modalatina.bo", nit="5551234001",
+                 phone="+591 4 422 3344", address="Av. Heroínas 210, Cochabamba"),
+        ]
+        for p in providers_data:
+            provider = _first_or_create(db, Provider, name=p["name"])
+            provider.contact_email = p["contact_email"]
+            provider.nit = p["nit"]
+            provider.phone = p["phone"]
+            provider.address = p["address"]
+            provider.is_active = True
         db.commit()
+
+        # ------------------------------------------------------------------
+        # Vinculación portal proveedor (proveedor@fashionstore.com -> Moda Latina)
+        # ------------------------------------------------------------------
+        prov_user = db.query(User).filter(User.email == "proveedor@fashionstore.com").first()
+        moda = db.query(Provider).filter(Provider.name == "Moda Latina").first()
+        if prov_user and moda:
+            existing_account = db.query(ProviderAccount).filter_by(user_id=prov_user.id).first()
+            if existing_account is None:
+                db.add(ProviderAccount(user_id=prov_user.id, provider_id=moda.id))
+                db.commit()
+            print("Portal proveedor vinculado: proveedor@fashionstore.com -> Moda Latina.")
 
         primavera = db.query(Season).filter(Season.name == "Primavera-Verano 2026").first()
         otono = db.query(Season).filter(Season.name == "Otoño-Invierno 2026").first()
 
-        colection_atardecer = _first_or_create(db, Collection, name="Atardecer", season_id=primavera.id)
-        colection_clasicos = _first_or_create(db, Collection, name="Clásicos", season_id=otono.id)
+        _first_or_create(db, Collection, name="Atardecer", season_id=primavera.id, is_active=True)
+        _first_or_create(db, Collection, name="Clásicos", season_id=otono.id, is_active=True)
         db.commit()
         print("Catálogo base listo.")
 
@@ -240,7 +275,7 @@ def seed_db():
         print("Productos listos.")
 
         # ------------------------------------------------------------------
-        # Variantes (talla + color + stock)
+        # Variantes (talla + color)
         # ------------------------------------------------------------------
         def get_size(name):
             return db.query(Size).filter(Size.name == name).first()
@@ -248,63 +283,106 @@ def seed_db():
         def get_color(name):
             return db.query(Color).filter(Color.name == name).first()
 
-        vestido = db.query(Product).filter(Product.name == "Vestido Floral Verano").first()
-        camiseta = db.query(Product).filter(Product.name == "Camiseta Premium Básica").first()
-        jean = db.query(Product).filter(Product.name == "Jean Slim Azul").first()
+        variant_specs = {
+            "Vestido Floral Verano": [("S", "Rosa"), ("M", "Rosa"), ("L", "Rosa"),
+                                      ("S", "Blanco"), ("M", "Blanco"), ("L", "Blanco")],
+            "Camiseta Premium Básica": [("M", "Blanco"), ("L", "Blanco"), ("XL", "Blanco"), ("XXL", "Blanco"),
+                                        ("M", "Gris"), ("L", "Gris"), ("XL", "Gris")],
+            "Jean Slim Azul": [("34", "Azul Marino"), ("36", "Azul Marino"), ("38", "Azul Marino"),
+                               ("36", "Negro"), ("38", "Negro")],
+            "Suéter de Lana Merino": [("S", "Beige"), ("M", "Beige"), ("L", "Beige"), ("M", "Gris")],
+            "Blazer Entallado": [("S", "Negro"), ("M", "Negro"), ("L", "Negro")],
+            "Camisa Oxford Blanca": [("M", "Blanco"), ("L", "Blanco"), ("XL", "Blanco")],
+            "Chaqueta de Cuero Clásica": [("M", "Negro"), ("L", "Negro"), ("XL", "Negro")],
+            "Vestido de Noche Elegante": [("S", "Negro"), ("M", "Negro")],
+            "Hoodie Deportivo": [("M", "Verde Oliva"), ("L", "Verde Oliva"), ("XL", "Gris")],
+            "Falda Midi Plisada": [("S", "Rosa"), ("M", "Rosa"), ("M", "Negro")],
+        }
 
-        if vestido and not vestido.variants:
-            for size in ["S", "M", "L"]:
-                for color, stock in [("Rosa", 12), ("Blanco", 8)]:
-                    db.add(
-                        ProductVariant(
-                            product_id=vestido.id,
-                            size_id=get_size(size).id,
-                            color_id=get_color(color).id,
-                            sku=f"VST-{size}-{color[:2].upper()}",
-                            stock=stock,
-                        )
-                    )
-
-        if camiseta and not camiseta.variants:
-            for size in ["M", "L", "XL", "XXL"]:
-                db.add(
-                    ProductVariant(
-                        product_id=camiseta.id,
-                        size_id=get_size(size).id,
-                        color_id=get_color("Blanco").id,
-                        sku=f"CMT-{size}-BL",
-                        stock=25,
-                    )
-                )
-
-        if jean and not jean.variants:
-            for size in ["34", "36", "38"]:
-                db.add(
-                    ProductVariant(
-                        product_id=jean.id,
-                        size_id=get_size(size).id,
-                        color_id=get_color("Azul Marino").id,
-                        sku=f"JNS-{size}-AM",
-                        stock=15,
-                    )
-                )
+        sku_counter = 0
+        for product_name, combos in variant_specs.items():
+            product = db.query(Product).filter(Product.name == product_name).first()
+            if product is None or product.variants:
+                continue
+            for size, color in combos:
+                sku_counter += 1
+                db.add(ProductVariant(
+                    product_id=product.id,
+                    size_id=get_size(size).id,
+                    color_id=get_color(color).id,
+                    sku=f"FS-{sku_counter:05d}",
+                ))
         db.commit()
         print("Variantes listas.")
 
         # ------------------------------------------------------------------
         # Sucursales
         # ------------------------------------------------------------------
-        branches = [
-            ("Sucursal Equipetrol", "Santa Cruz", "Av. San Martín 320, Equipetrol", "+591 3 345 2233"),
-            ("Sucursal Ayacucho", "Santa Cruz", "Calle Ayacucho 150, Centro", "+591 3 334 1100"),
-            ("Sucursal Sopocachi", "La Paz", "Av. 6 de Agosto 2200, Sopocachi", "+591 2 244 5566"),
-            ("Sucursal Centro", "Cochabamba", "Av. Heroínas 410, Centro", "+591 4 422 7788"),
-            ("Sucursal Tarija", "Tarija", "Calle 15 de Abril 89", "+591 4 663 1122"),
+        branches_data = [
+            ("Sucursal Equipetrol", "Santa Cruz", "Av. San Martín 320, Equipetrol",
+             "+591 3 345 2233", -17.790877, -63.185281),
+            ("Sucursal Ayacucho", "Santa Cruz", "Calle Ayacucho 150, Centro",
+             "+591 3 334 1100", -17.783383, -63.182030),
+            ("Sucursal Sopocachi", "La Paz", "Av. 6 de Agosto 2200, Sopocachi",
+             "+591 2 244 5566", -16.509931, -68.133519),
+            ("Sucursal Centro", "Cochabamba", "Av. Heroínas 410, Centro",
+             "+591 4 422 7788", -17.393541, -66.157012),
+            ("Sucursal Tarija", "Tarija", "Calle 15 de Abril 89",
+             "+591 4 663 1122", -21.535498, -64.729562),
         ]
-        for name, city, address, phone in branches:
-            _first_or_create(db, Branch, name=name, city=city, address=address, phone=phone, is_active=True)
+        for name, city, address, phone, lat, lng in branches_data:
+            branch = _first_or_create(db, Branch, name=name)
+            branch.city = city
+            branch.address = address
+            branch.phone = phone
+            branch.latitude = lat
+            branch.longitude = lng
+            branch.is_active = True
         db.commit()
         print("Sucursales listas.")
+
+        # ------------------------------------------------------------------
+        # Inventario por sucursal (CU11/CU21) con el movimiento INGRESO inicial
+        # ------------------------------------------------------------------
+        admin_user = db.query(User).filter(User.email == "admin@fashionstore.com").first()
+        branches = db.query(Branch).all()
+        variants = db.query(ProductVariant).order_by(ProductVariant.id).all()
+
+        # Distribución base: cada variante disponible en 2-3 sucursales con cantidades variadas
+        import random
+        random.seed(42)
+        per_variant = {
+            v.id: {
+                b.id: random.choice([6, 8, 10, 12, 15, 20, 25]) if idx % 3 == 0 else
+                      random.choice([3, 4, 5, 6]) if idx % 3 == 1 else
+                      random.choice([1, 2, 3]) if random.random() > 0.6 else 0
+                for idx, b in enumerate(branches)
+            }
+            for v in variants
+        }
+
+        inventory_created = 0
+        for v in variants:
+            for b in branches:
+                qty = per_variant[v.id][b.id]
+                if qty <= 0:
+                    continue
+                existing = db.query(Inventory).filter_by(variant_id=v.id, branch_id=b.id).first()
+                if existing:
+                    continue
+                inv = Inventory(variant_id=v.id, branch_id=b.id, available=qty)
+                db.add(inv)
+                db.flush()
+                db.add(InventoryMovement(
+                    inventory_id=inv.id,
+                    movement_type="INGRESO",
+                    quantity=qty,
+                    reason="Stock inicial",
+                    user_id=admin_user.id,
+                ))
+                inventory_created += 1
+        db.commit()
+        print(f"Inventario listo: {inventory_created} registros con ingreso inicial.")
 
     except Exception as e:
         print(f"Error durante el seed: {e}")

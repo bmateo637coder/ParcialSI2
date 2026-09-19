@@ -1,10 +1,22 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import create_access_token, get_current_user, hash_password, verify_password
+from app.core.security import create_access_token, decode_token, get_current_user, hash_password, verify_password
 from app.models.user import Role, User
-from app.schemas import LoginRequest, Token, UserCreate, UserResponse, UserUpdate
+from app.schemas import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    Token,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
 
 router = APIRouter()
 
@@ -32,6 +44,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         first_name=user.first_name.strip(),
         last_name=user.last_name.strip(),
         email=user.email,
+        phone=user.phone.strip() if user.phone else None,
         hashed_password=hash_password(user.password),
         role_id=cliente_role.id,
     )
@@ -81,8 +94,88 @@ def update_me(
     db: Session = Depends(get_db),
 ):
     data = payload.model_dump(exclude_unset=True)
+    new_email = data.get("email")
+    if new_email is not None and new_email != current_user.email:
+        other = db.query(User).filter(User.email == new_email).first()
+        if other:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El correo ya está registrado",
+            )
+    password = data.pop("password", None)
     for field, value in data.items():
         setattr(current_user, field, value.strip() if isinstance(value, str) else value)
+    if password:
+        current_user.hashed_password = hash_password(password)
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ResetPasswordResponse,
+    summary="Solicitar restablecimiento de contraseña",
+)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe una cuenta activa con ese correo",
+        )
+
+    # Token de corto plazo (30 min), con propósito explícito para no reutilizar
+    # tokens de acceso como token de reseteo.
+    reset_token = create_access_token(
+        subject=user.email,
+        role=user.role_name or "Cliente",
+        extra={"purpose": "reset_password"},
+    )
+    # Sin servidor de correo configurado se devuelve el token en la respuesta
+    # (modo demo). En producción se enviaría por email y no se retornaría.
+    return ResetPasswordResponse(
+        message="Se generó un enlace de restablecimiento de contraseña.",
+        reset_token=reset_token,
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+    summary="Restablecer contraseña con token",
+)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        claims = decode_token(payload.token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de restablecimiento no es válido o expiró",
+        )
+    if claims.get("purpose") != "reset_password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de restablecimiento no es válido o expiró",
+        )
+
+    exp = claims.get("exp")
+    if exp is not None:
+        expired_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+        if expired_at < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El enlace de restablecimiento no es válido o expiró",
+            )
+
+    email = claims.get("sub")
+    user = db.query(User).filter(User.email == email).first() if email else None
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de restablecimiento no es válido o expiró",
+        )
+
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return ResetPasswordResponse(message="Contraseña restablecida. Ya puedes iniciar sesión.")

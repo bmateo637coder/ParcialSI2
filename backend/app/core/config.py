@@ -24,6 +24,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:4200",
     ]
 
+    # Narrativa generativa de los reportes por voz. Si GENAI_API_KEY está vacío
+    # se usa la plantilla local en español (fallback determinista).
+    GENAI_API_KEY: str = ""
+    GENAI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+    GENAI_MODEL: str = "gemini-1.5-flash"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
