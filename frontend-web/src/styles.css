@@ -627,3 +627,11 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   .nav-links { gap: 0.9rem; }
   .user-chip .chip-text { display: none; }
 }
+
+@media (max-width: 640px) {
+  .navbar { padding: 0 0.75rem; gap: 0.35rem; }
+  .nav-links { flex-wrap: wrap; justify-content: center; gap: 0.35rem 0.9rem; }
+  .nav-item { font-size: 0.85rem; padding: 0.3rem 0; }
+  .btn-small-nav { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+  .user-chip { font-size: 0.8rem; }
+}
