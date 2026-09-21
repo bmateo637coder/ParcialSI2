@@ -445,3 +445,53 @@ def test_chat_conversations_are_private(client, client_token, cajero_token):
     conv_id = res.json()["conversation_id"]
     other = client.get(f"/api/assistant/conversations/{conv_id}", headers=_h(cajero_token))
     assert other.status_code == 404
+
+
+def test_chat_returns_suggestions(client, client_token):
+    res = client.post("/api/assistant/chat", json={"message": "Hola, buenas"},
+                      headers=_h(client_token))
+    assert res.status_code == 200
+    body = res.json()
+    assert isinstance(body.get("suggestions"), list)
+    assert body["suggestions"]
+
+
+def test_chat_product_reply_offers_followups(client, client_token, catalog):
+    res = client.post("/api/assistant/chat", json={"message": "¿Tienen prendas?"},
+                      headers=_h(client_token))
+    assert res.status_code == 200
+    body = res.json()
+    assert "Prenda Test" in body["reply"]
+    followups = body.get("suggestions", [])
+    assert any("talla" in s.lower() for s in followups)
+
+
+def test_chat_follow_up_remembers_product_context(client, client_token, catalog):
+    res1 = client.post("/api/assistant/chat", json={"message": "¿Tienen prendas azules?"},
+                       headers=_h(client_token))
+    assert res1.status_code == 200
+    conv_id = res1.json()["conversation_id"]
+    assert "Prenda Test" in res1.json()["reply"]
+
+    # El follow-up no nombra el producto: debe resolverlo desde el contexto previo.
+    res2 = client.post("/api/assistant/chat",
+                       json={"conversation_id": conv_id, "message": "¿Y en qué tallas hay?"},
+                       headers=_h(client_token))
+    assert res2.status_code == 200
+    body2 = res2.json()
+    assert "Prenda Test" in body2["reply"]
+    assert "M" in body2["reply"]  # la talla del catálogo de prueba
+
+
+def test_chat_follow_up_price_uses_context(client, client_token, catalog):
+    res1 = client.post("/api/assistant/chat", json={"message": "¿cuánto cuesta la prenda?"},
+                       headers=_h(client_token))
+    assert "Prenda Test" in res1.json()["reply"]
+    conv_id = res1.json()["conversation_id"]
+
+    res2 = client.post("/api/assistant/chat",
+                       json={"conversation_id": conv_id, "message": "¿Y cuánto cuesta?"},
+                       headers=_h(client_token))
+    assert res2.status_code == 200
+    assert "Prenda Test" in res2.json()["reply"]
+    assert "100" in res2.json()["reply"]

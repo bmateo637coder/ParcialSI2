@@ -51,12 +51,13 @@ def chat(payload: ChatRequest, user: User = Depends(get_current_user),
         db.add(conv)
         db.flush()
 
+    history = [{"role": m.role, "content": m.content} for m in conv.messages]
     db.add(ChatMessage(conversation_id=conv.id, role="user", content=payload.message))
-    reply = generate_answer(db, user, payload.message)
+    reply, suggestions = generate_answer(db, user, payload.message, history=history)
     db.add(ChatMessage(conversation_id=conv.id, role="assistant", content=reply))
 
     db.commit()
-    return ChatResponse(conversation_id=conv.id, reply=reply)
+    return ChatResponse(conversation_id=conv.id, reply=reply, suggestions=suggestions)
 
 
 @router.get("/assistant/conversations", response_model=list[ChatConversationResponse],

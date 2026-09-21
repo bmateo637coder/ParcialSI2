@@ -32,6 +32,25 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        """URL de base de datos lista para SQLAlchemy.
+
+        Railway inyecta ``DATABASE_URL`` con el esquema ``postgres://``
+        (sin driver). SQLAlchemy lo acepta, pero se normaliza a
+        ``postgresql+psycopg2://`` para fijar el driver explícitamente y
+        evitar sorpresas entre proveedores.
+        """
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg2://" + url[len("postgres://"):]
+        return url
+
+    @property
+    def cors_allow_credentials(self) -> bool:
+        """No se pueden combinar credenciales con un origen comodín ``*``."""
+        return "*" not in self.BACKEND_CORS_ORIGINS
+
 
 @lru_cache
 def get_settings() -> Settings:

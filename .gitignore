@@ -24,3 +24,10 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Flutter ---
+movil/.dart_tool/
+movil/build/
+movil/android/.gradle/
+movil/android/build/
+*.iml

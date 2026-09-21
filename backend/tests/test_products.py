@@ -104,6 +104,70 @@ def test_variant_flow(client, auth_headers):
     assert variant.status_code == 201
 
 
+def test_variant_stock_mirrors_real_inventory(client, auth_headers):
+    """El stock de las variantes visibles en el catálogo debe sumar el
+    inventario real por sucursal, no una columna que nunca se llena."""
+    product = client.post(
+        "/api/products/",
+        json={"name": "Camiseta Stock", "base_price": 150},
+        headers=auth_headers,
+    ).json()
+
+    size = client.post(
+        "/api/products/catalog/sizes",
+        json={"name": "LG"},
+        headers=auth_headers,
+    ).json()
+    color = client.post(
+        "/api/products/catalog/colors",
+        json={"name": "Azul"},
+        headers=auth_headers,
+    ).json()
+
+    variant = client.post(
+        f"/api/products/{product['id']}/variants",
+        json={"size_id": size["id"], "color_id": color["id"], "sku": "STK-LG-AZ", "stock": 0},
+        headers=auth_headers,
+    ).json()
+
+    b1 = client.post(
+        "/api/branches/",
+        json={"name": "Stock LP", "city": "La Paz", "address": "Av. 1"},
+        headers=auth_headers,
+    ).json()
+    b2 = client.post(
+        "/api/branches/",
+        json={"name": "Stock SC", "city": "Santa Cruz", "address": "Av. 2"},
+        headers=auth_headers,
+    ).json()
+
+    for branch_id, available in ((b1["id"], 12), (b2["id"], 3)):
+        client.post(
+            "/api/inventory/",
+            json={"variant_id": variant["id"], "branch_id": branch_id, "available": available},
+            headers=auth_headers,
+        )
+
+    data = client.get(f"/api/products/{product['id']}/variants").json()
+    assert len(data) == 1
+    assert data[0]["id"] == variant["id"]
+    assert data[0]["stock"] == 15
+
+    well = client.post(
+        "/api/branches/",
+        json={"name": "Stock CB", "city": "Cochabamba", "address": "Av. 3"},
+        headers=auth_headers,
+    ).json()
+    client.post(
+        "/api/inventory/",
+        json={"variant_id": variant["id"], "branch_id": well["id"], "available": 10},
+        headers=auth_headers,
+    )
+
+    data = client.get(f"/api/products/{product['id']}/variants").json()
+    assert data[0]["stock"] == 25
+
+
 # ======================================================================
 # Colecciones (CU8 ampliado)
 # ======================================================================

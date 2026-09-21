@@ -58,6 +58,22 @@ def _ensure_roles():
         db.close()
 
 
+@app.on_event("startup")
+def _seed_initial_data():
+    """Siembra los datos demo si AUTO_SEED está habilitado (Railway).
+
+    La función de seed es idempotente: no duplica registros existentes.
+    Puede ejecutarse manualmente con ``python seed.py`` en local.
+    """
+    import os
+
+    if os.getenv("AUTO_SEED", "").strip().lower() not in {"1", "true", "yes"}:
+        return
+    from seed import seed_db
+
+    seed_db()
+
+
 def _migrate_order_items_columns():
     """SQLite: create_all no altera tablas existentes; añade las columnas de
     promociones a order_items si faltan (BD de desarrollo ya creada)."""
@@ -81,7 +97,7 @@ def _migrate_order_items_columns():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -109,4 +125,14 @@ def read_root():
 
 @app.get(f"{settings.API_PREFIX}/health", tags=["Info"])
 def health_check():
-    return {"status": "ok"}
+    from sqlalchemy import text
+
+    from app.core.database import SessionLocal
+
+    db_status = "ok"
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - entorno caído
+        db_status = f"error: {type(exc).__name__}"
+    return {"status": "ok", "database": db_status}

@@ -1,14 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ApiService, ChatConversation, ChatMessage } from './api.service';
-
-const SUGGESTIONS = [
-  '¿Cuál es el estado de mi pedido?',
-  '¿Hacen envíos a domicilio?',
-  '¿Cuál es el horario de atención?',
-  '¿Qué métodos de pago aceptan?',
-];
 
 @Component({
   selector: 'app-assistant',
@@ -30,16 +23,22 @@ const SUGGESTIONS = [
     </header>
 
     <div class="chat-body" #scroll>
-      <div class="chat-empty" *ngIf="!messages.length">
-        <p>¡Hola! Soy el asistente de FashionStore. Pregúntame sobre pedidos, envíos, horarios, pagos o prendas.</p>
-        <div class="chat-sug">
-          <button *ngFor="let s of suggestions" class="btn btn-outline btn-sm" (click)="sendRaw(s)">{{ s }}</button>
+      <div *ngIf="!messages.length">
+        <div class="chat-empty">
+          <p>¡Hola! Soy el asistente de FashionStore. Pregúntame sobre pedidos, envíos, horarios, pagos o prendas.</p>
+          <p class="chat-hint">Puedo seguir tus preguntas: por ejemplo, si hablamos de una prenda, pregúntame luego <em>“y en qué tallas hay”</em> o <em>“y cuánto cuesta”</em>.</p>
         </div>
       </div>
 
-      <div *ngFor="let m of messages" class="chat-msg" [class.assistant]="m.role === 'assistant'">
-        {{ m.content }}
-      </div>
+      <ng-container *ngFor="let m of messages">
+        <div class="chat-msg" [class.assistant]="m.role === 'assistant'">
+          {{ m.content }}
+        </div>
+        <div *ngIf="m.role === 'assistant' && m.suggestions?.length" class="chat-sug">
+          <button *ngFor="let s of m.suggestions" class="btn btn-outline btn-sm"
+            (click)="sendRaw(s)">{{ s }}</button>
+        </div>
+      </ng-container>
 
       <div *ngIf="busy" class="chat-msg assistant"><span class="typing">…</span></div>
     </div>
@@ -70,7 +69,8 @@ const SUGGESTIONS = [
     .chat-status { font-size:.75rem; color:var(--muted,#888); }
     .chat-body { flex:1; overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:.6rem; }
     .chat-empty { color:var(--muted,#777); font-size:.9rem; }
-    .chat-sug { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.6rem; }
+    .chat-hint { font-size:.78rem; font-style:italic; margin-top:.4rem; }
+    .chat-sug { display:flex; flex-wrap:wrap; gap:.4rem; }
     .chat-msg { max-width:85%; padding:.55rem .8rem; border-radius:12px; font-size:.88rem; white-space:pre-wrap; }
     .chat-msg:not(.assistant){ align-self:flex-end; background:#e63946; color:#fff; border-bottom-right-radius:4px; }
     .chat-msg.assistant { align-self:flex-start; background:#f3ede4; color:#2d2a26; border-bottom-left-radius:4px; }
@@ -79,13 +79,14 @@ const SUGGESTIONS = [
   `],
 })
 export class AssistantComponent implements OnInit {
+  @ViewChild('scroll') scrollEl?: ElementRef;
+
   open = false;
-  messages: ChatMessage[] = [];
+  messages: (ChatMessage & { suggestions?: string[] })[] = [];
   conversationId: number | null = null;
   draft = '';
   busy = false;
   unread = false;
-  suggestions = SUGGESTIONS;
   private triedLoad = false;
 
   constructor(private api: ApiService) {}
@@ -102,12 +103,20 @@ export class AssistantComponent implements OnInit {
           if (convs.length) {
             const last = convs[0];
             this.conversationId = last.id;
-            this.messages = last.messages || [];
+            this.messages = (last.messages || []) as (ChatMessage & { suggestions?: string[] })[];
+            this.scrollTop();
           }
         },
         error: () => {},
       });
     }
+  }
+
+  private scrollTop(): void {
+    setTimeout(() => {
+      const el = this.scrollEl?.nativeElement as HTMLElement | undefined;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   }
 
   sendRaw(text: string): void {
@@ -118,14 +127,20 @@ export class AssistantComponent implements OnInit {
   send(): void {
     const text = this.draft.trim();
     if (!text || this.busy) return;
-    this.messages = [...this.messages, { role: 'user', content: text }];
+    this.messages = [...this.messages, { role: 'user', content: text } as ChatMessage];
     this.draft = '';
     this.busy = true;
+    this.scrollTop();
     this.api.sendChatMessage(text, this.conversationId).subscribe({
       next: (res) => {
         this.conversationId = res.conversation_id;
-        this.messages = [...this.messages, { role: 'assistant', content: res.reply }];
+        this.messages = [...this.messages, {
+          role: 'assistant',
+          content: res.reply,
+          suggestions: res.suggestions && res.suggestions.length ? res.suggestions : undefined,
+        }];
         this.busy = false;
+        this.scrollTop();
       },
       error: () => {
         this.messages = [...this.messages, {
@@ -133,6 +148,7 @@ export class AssistantComponent implements OnInit {
           content: 'Lo siento, no pude conectarme con el asistente. Inténtalo de nuevo en un momento.',
         }];
         this.busy = false;
+        this.scrollTop();
       },
     });
   }

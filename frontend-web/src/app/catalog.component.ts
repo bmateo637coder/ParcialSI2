@@ -5,8 +5,7 @@ import { ApiService, CategoryItem, Product, ProductVariant, RecommendedItem } fr
 import { CommonModule } from '@angular/common';
 import { ToastService } from './toast.service';
 
-const FALLBACK_IMG =
-  'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=600';
+const FALLBACK_IMG = '/img/placeholder.svg';
 const REC_IMG =
   'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=400';
 

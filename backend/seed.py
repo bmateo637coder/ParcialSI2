@@ -3,7 +3,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from passlib.context import CryptContext
+import bcrypt
 
 from app.core.database import Base, SessionLocal, engine
 from app.models.branch import Branch
@@ -21,7 +21,9 @@ from app.models.catalog import (
 from app.models.inventory import Inventory, InventoryMovement
 from app.models.user import Role, User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def _first_or_create(db, model, **kwargs):
@@ -78,7 +80,7 @@ def seed_db():
             user.last_name = u["last_name"]
             user.phone = u["phone"]
             if not user.hashed_password:
-                user.hashed_password = pwd_context.hash(u["password"])
+                user.hashed_password = _hash(u["password"])
             user.role_id = role[u["role"]]
             user.is_active = True
         db.commit()

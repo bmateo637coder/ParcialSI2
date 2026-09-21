@@ -653,6 +653,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     conversation_id: int
     reply: str
+    suggestions: list[str] = []
 
 
 class ChatMessageResponse(BaseModel):

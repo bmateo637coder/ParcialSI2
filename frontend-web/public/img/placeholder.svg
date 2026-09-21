@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 520">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#f4efe9"/>
+      <stop offset="1" stop-color="#e7ddd1"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="520" fill="url(#bg)"/>
+  <g transform="translate(200 190)" fill="#cbb8a4" stroke="#cbb8a4" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="0" cy="-128" r="26" fill="none"/>
+    <path d="M0 -100 L0 -16 M0 -16 L-66 42 M0 -16 L66 42 M0 -16 L0 30"/>
+    <path d="M-66 42 L-74 78 M66 42 L74 78 M-74 78 L-104 96 L-50 104 L-46 72 Z"/>
+    <path d="M74 78 L104 96 L50 104 L46 72 Z"/>
+  </g>
+  <text x="200" y="356" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#a08d78">FashionStore</text>
+</svg>

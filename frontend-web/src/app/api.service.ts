@@ -243,6 +243,7 @@ export interface ChatConversation {
 export interface ChatReply {
   conversation_id: number;
   reply: string;
+  suggestions?: string[];
 }
 
 export interface NotificationItem {

@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.models.catalog import (
     Season,
     Size,
 )
+from app.models.inventory import Inventory
 from app.schemas import (
     CategoryCreate,
     CategoryResponse,
@@ -151,12 +153,35 @@ def delete_product(product_id: int, _admin=Depends(require_admin), db: Session =
 )
 def get_variants(product_id: int, db: Session = Depends(get_db)):
     _get_product_or_404(db, product_id)
-    return (
+    variants = (
         db.query(ProductVariant)
         .filter(ProductVariant.product_id == product_id)
         .order_by(ProductVariant.id)
         .all()
     )
+    if not variants:
+        return []
+
+    _load_real_stocks(db, variants)
+    return variants
+
+
+def _load_real_stocks(db: Session, variants: list[ProductVariant]) -> None:
+    """Sobrescribe `stock` de cada variante con la existencia REAL agregada de la
+    tabla `inventory` (por sucursal). La columna `product_variants.stock` nunca se
+    llena con el seed, así que el catálogo caía en 'Agotado' a pesar de haber stock."""
+    variant_ids = [v.id for v in variants]
+    totals = dict(
+        db.query(
+            Inventory.variant_id,
+            func.coalesce(func.sum(Inventory.available), 0),
+        )
+        .filter(Inventory.variant_id.in_(variant_ids))
+        .group_by(Inventory.variant_id)
+        .all()
+    )
+    for variant in variants:
+        variant.stock = int(totals.get(variant.id, 0))
 
 
 @router.post(
