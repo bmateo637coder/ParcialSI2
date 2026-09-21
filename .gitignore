@@ -18,6 +18,8 @@ node_modules/
 dist/
 coverage/
 *.log
+frontend-web/.angular/
+frontend-web/browser/
 
 # --- Editor / SO ---
 .vscode/

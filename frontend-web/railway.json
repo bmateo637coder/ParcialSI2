@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npx serve -s dist/frontend-web/browser -l $PORT",
+    "startCommand": "npx serve -s browser -l $PORT",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }

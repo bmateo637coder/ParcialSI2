@@ -5,6 +5,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import bcrypt
 
+from datetime import date
+
 from app.core.database import Base, SessionLocal, engine
 from app.models.branch import Branch
 from app.models.catalog import (
@@ -105,8 +107,8 @@ def seed_db():
             season = _first_or_create(db, Season, name=s["name"])
             season.year = s["year"]
             season.description = s["description"]
-            season.start_date = s["start_date"]
-            season.end_date = s["end_date"]
+            season.start_date = date.fromisoformat(s["start_date"])
+            season.end_date = date.fromisoformat(s["end_date"])
             season.is_active = True
         db.commit()
 
