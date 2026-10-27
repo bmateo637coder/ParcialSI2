@@ -9,19 +9,27 @@ from .promotion import Promotion  # noqa: F401  (registro de modelos en la metad
 class Provider(Base):
     __tablename__ = "providers"
     id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
     name = Column(String(150), nullable=False)
     contact_email = Column(String(100))
     nit = Column(String(30), unique=True)
     phone = Column(String(30))
     address = Column(String(180))
     is_active = Column(Boolean, default=True, nullable=False)
+
+    empresa = relationship("Empresa")
     products = relationship("Product", back_populates="provider")
 
 
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255))
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    empresa = relationship("Empresa")
     products = relationship("Product", back_populates="category")
 
 

@@ -1,0 +1,204 @@
+================================================================================
+DIAGRAMAS DE ESTADO Y DE NAVEGACION - UML 2.5
+FashionStore
+================================================================================
+
+4 diagramas de estado y 4 de navegacion, todos en horizontal (izq -> der).
+Pegar en draw.io con: Arrange > Insert > Advanced > PlantUML.
+
+Estados tomados del codigo:
+  ProductProposal : PENDIENTE, APROBADA, RECHAZADA
+  Product         : ACTIVO, INACTIVO
+  Order           : PENDIENTE, PAGADO, ENVIADO, ENTREGADO, CANCELADO
+  Payment         : PENDIENTE, COMPLETADO, FALLIDO
+
+La navegacion se dibuja como diagrama de componentes: cada pantalla es un
+componente y las flechas son los enlaces a los que se puede ir.
+
+
+================================================================================
+1. ESTADO - CATALOGO
+================================================================================
+@startuml Estado_Catalogo
+title Estado - Catalogo
+left to right direction
+
+[*] --> PENDIENTE : proveedor envia propuesta
+
+state "PENDIENTE" as PENDIENTE
+state "APROBADA" as APROBADA
+state "RECHAZADA" as RECHAZADA
+
+PENDIENTE --> APROBADA : admin aprueba
+PENDIENTE --> RECHAZADA : admin rechaza
+APROBADA --> [*]
+RECHAZADA --> [*]
+
+---
+
+[*] --> ACTIVO : alta aprobada
+
+state "ACTIVO" as ACTIVO
+state "INACTIVO" as INACTIVO
+
+ACTIVO --> INACTIVO : admin desactiva
+INACTIVO --> ACTIVO : admin reactiva
+@enduml
+
+
+================================================================================
+2. ESTADO - VENTA (POS)
+================================================================================
+@startuml Estado_Venta
+title Estado - Venta presencial
+left to right direction
+
+[*] --> PENDIENTE : cajero cobra
+
+state "PENDIENTE" as PENDIENTE
+state "PAGADO" as PAGADO
+state "ENVIADO" as ENVIADO
+state "ENTREGADO" as ENTREGADO
+state "CANCELADO" as CANCELADO
+
+PENDIENTE --> PAGADO : cobro aprobado
+PENDIENTE --> CANCELADO : cajero anula
+PAGADO --> ENVIADO : pedido enviado
+PAGADO --> CANCELADO : anular
+ENVIADO --> ENTREGADO : entregado
+ENVIADO --> CANCELADO : anular
+
+ENTREGADO --> [*]
+CANCELADO --> [*]
+@enduml
+
+
+================================================================================
+3. ESTADO - COMPRA (WEB)
+================================================================================
+@startuml Estado_Compra
+title Estado - Compra en linea
+left to right direction
+
+[*] --> PENDIENTE : cliente paga
+
+state "PENDIENTE" as PENDIENTE
+state "PAGADO" as PAGADO
+state "ENVIADO" as ENVIADO
+state "ENTREGADO" as ENTREGADO
+state "CANCELADO" as CANCELADO
+
+PENDIENTE --> PAGADO : pago aprobado
+PENDIENTE --> CANCELADO : tarjeta rechazada
+PAGADO --> ENVIADO : pedido enviado
+ENVIADO --> ENTREGADO : entregado
+
+ENTREGADO --> [*]
+CANCELADO --> [*]
+@enduml
+
+
+================================================================================
+4. ESTADO - FICHA DE PAGO
+================================================================================
+@startuml Estado_FichaPago
+title Estado - Ficha de pago
+left to right direction
+
+[*] --> PENDIENTE : se intenta el cobro
+
+state "PENDIENTE" as PENDIENTE
+state "COMPLETADO" as COMPLETADO
+state "FALLIDO" as FALLIDO
+
+PENDIENTE --> COMPLETADO : pasarela aprueba
+PENDIENTE --> FALLIDO : pasarela rechaza
+FALLIDO --> PENDIENTE : reintentar
+
+COMPLETADO --> [*]
+@enduml
+
+
+================================================================================
+5. NAVEGACION - CATALOGO
+================================================================================
+@startuml Navegacion_Catalogo
+title Navegacion - Catalogo
+left to right direction
+
+component "Catalogo" as Cat
+component "Detalle de producto" as Det
+component "Vestidor AR" as Ves
+component "Disponibilidad" as Dis
+component "Carrito" as Carr
+
+Cat --> Det : abrir prenda
+Det --> Ves : probarsela
+Det --> Dis : ver stock
+Ves --> Det : volver
+Dis --> Det : volver
+Det --> Carr : agregar
+@enduml
+
+
+================================================================================
+6. NAVEGACION - COMPRA
+================================================================================
+@startuml Navegacion_Compra
+title Navegacion - Compra en linea
+left to right direction
+
+component "Carrito" as Carr
+component "Checkout" as Chk
+component "Resultado del pago" as Res
+component "Mis pedidos" as Ped
+
+Carr --> Chk : confirmar y pagar
+Chk --> Res : cobrar
+Res --> Ped
+Ped --> Chk : reintentar
+@enduml
+
+
+================================================================================
+7. NAVEGACION - VENTA (POS)
+================================================================================
+@startuml Navegacion_Venta
+title Navegacion - Venta presencial
+left to right direction
+
+component "Iniciar sesion" as Log
+component "Punto de venta" as Pos
+component "Cobro" as Cob
+component "Comprobante" as Com
+component "Pedido pendiente" as Pen
+
+Log --> Pos : entrar
+Pos --> Cob : cobrar
+Cob --> Com : aprobado
+Cob --> Pen : rechazado
+@enduml
+
+
+================================================================================
+8. NAVEGACION - FICHA DE PAGO
+================================================================================
+@startuml Navegacion_FichaPago
+title Navegacion - Ficha de pago
+left to right direction
+
+component "Ficha de pago" as Fic
+component "Tarjeta" as Tar
+component "Efectivo" as Efe
+component "Pasarela" as Pas
+component "Aprobado" as Apr
+component "Fallido" as Fal
+
+Fic --> Tar : elegir
+Fic --> Efe : elegir
+Tar --> Pas : enviar
+Efe --> Apr
+Pas --> Apr : acepta
+Pas --> Fal : rechaza
+Fal --> Fic : reintentar
+@enduml

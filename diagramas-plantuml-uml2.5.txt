@@ -1,0 +1,1925 @@
+================================================================================
+DIAGRAMAS DE SECUENCIA UML 2.5 - FASHION STORE (Sistemas II)
+Codigos PlantUML listos para draw.io  (CU1 - CU26)
+================================================================================
+Archivo      : diagramas-plantuml-uml2.5.txt
+Codificacion : UTF-8 (conserva los acentos al pegar en draw.io)
+Base normativ: UML2.5.pdf, capitulo "Diagrama de secuencia" (pag. 48-52)
+               y seccion "Casos de uso / requisitos" (pag. 38-42)
+Proyecto     : FastAPI (backend) + Angular (web) + Flutter (movil)
+Inclusion    : 1 caso de uso = 1 bloque PlantUML independiente
+
+
+================================================================================
+1. REGLAS DE LA NORMA APLICADAS Y SU EQUIVALENTE EN PLANTUML
+================================================================================
+Segun UML2.5.pdf, el diagrama de secuencia se construye sobre dos dimensiones y
+se compone de dos elementos (objetos y mensajes). Cada regla del documento y su
+traduccion en el codigo PlantUML de este archivo:
+
+  (R1) DIMENSION HORIZONTAL  -> los OBJETOS que participan en la secuencia.
+       En PlantUML: los lifelines declarados en el encabezado de cada diagrama.
+
+  (R2) DIMENSION VERTICAL    -> la linea de tiempo; de arriba (menor tiempo)
+       hacia abajo (mayor tiempo). En PlantUML: el orden de los mensajes de
+       arriba hacia abajo. Nunca se invierte el orden temporal.
+
+  (R3) UN OBJETO = UNA SOLA INSTANCIA (no varias). Por eso los objetos que se
+       crean durante la interaccion se rotulan con su instancia, p.ej.
+       "Order : o1", "Reservation : r1". Si un elemento es multivaluado se deja
+       constancia de cual instancia esta trabajando.
+       En PlantUML: `create ... as O` mas el sufijo de instancia en la etiqueta.
+
+  (R4) OBJETOS PREEXISTENTES -> se situan en el eje horizontal (arriba).
+       OBJETOS CREADOS DURANTE LA INTERACCION -> se situan en el momento de su
+       creacion, mediante una llamada create.
+       En PlantUML: declaracion inicial = preexistentes; `create` = creados aqui.
+
+  (R5) FIN DE UN PUNTO DE VIDA -> aspa (X) al final de la linea de vida. Solo se
+       marca cuando el objeto deja de existir realmente; los objetos persistentes
+       NO se destruyen, su linea de vida se prolonga hasta el final del diagrama.
+       En PlantUML: `destroy X` (usado solo para objetos transitorios reales:
+       detectores de IA, DTOs de respuesta, capturas de audio, etc.).
+
+  (R6) FOCO DE CONTROL -> rectangulo superpuesto a la linea de vida que indica
+       el tiempo en que el objeto esta llevando a cabo trabajo.
+       En PlantUML: `activate` / `deactivate` (siempre balanceados).
+
+  (R7) MENSAJE -> flecha con el nombre del mensaje y sus argumentos, desde el
+       emisor hacia el receptor. En PlantUML: `A -> B : mensaje(argumentos)`.
+
+  (R8) RESPUESTA -> flecha DISCONTINUA. En PlantUML: `A --> B : respuesta`.
+
+  (R9) CREATE y DESTROY -> representables a mitad de la interaccion.
+       En PlantUML: `create` y `destroy`.
+
+
+================================================================================
+2. ESTEREOTIPOS USADOS (notacion UML estandar)
+================================================================================
+  <<actor>>     Persona o sistema externo.      -> `actor`
+  <<boundary>>  Interfaz de usuario (pantalla).  -> `boundary`
+  <<control>>   Controlador / servicio / caso de uso. -> `control`
+  <<entity>>    Entidad del dominio de datos.    -> `entity`
+  <<database>>  Almacenamiento persistente.       -> `database`
+
+  Los nombres de los mensajes se toman del CODIGO REAL del proyecto:
+  rutas HTTP de FastAPI, nombres de funciones y de servicios
+  (get_current_user, require_admin, require_staff, _process_payment,
+  SandboxPaymentGateway, _complete_order_sale, _deduct_order_stock,
+  _movement, _release_reserved_stock, _expire_late, recommend, generate_answer).
+
+
+================================================================================
+3. COMO PEGAR CADA DIAGRAMA EN DRAW.IO
+================================================================================
+  Opcion A (recomendada):
+     1. Abre draw.io (app.diagrams.net) y crea un lienzo en blanco.
+     2. Menu  Arrange > Insert > Advanced > PlantUML...   (o "Insertar >
+        Avanzado > PlantUML", segun idioma).
+     3. Copia UN bloque completo (desde su linea de inicio hasta su linea de
+        cierre) y pegalo.
+     4. Acepta. El diagrama aparece renderizado en el lienzo.
+
+  Opcion B: arrastra el bloque hasta el lienzo cuando draw.io detecta el texto.
+
+  Opcion C: si tu version no muestra el menu PlantUML, genera la imagen en
+     plantuml.com pasting el mismo bloque y luego inserala como imagen
+     (Insert > Image) en el lienzo de draw.io.
+
+  Notas:
+   - Copia siempre el bloque ENTERO, desde su linea de inicio hasta la de cierre.
+   - Un bloque = un diagrama. No pegues dos bloques en la misma ventana.
+   - Cambia el titulo (title) si tu PUDS numera los casos de uso de otra forma.
+   - Para renombrar la instancia edita la etiqueta, p.ej. "Order : o1" > "Order : o42".
+
+
+================================================================================
+CU1 - REGISTRARSE   (Usuario y Autenticacion / Actor: Cliente)
+================================================================================
+@startuml CU1_Registrarse
+title CU1 - Registrarse
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "RegisterForm\n(Angular)" as FRM <<boundary>>
+control "AuthController\nPOST /api/auth/register" as AC <<control>>
+control "Security\nhash_password (bcrypt)" as SEC <<control>>
+entity "Role : 'Cliente'\n(preexistente)" as R <<entity>>
+database "Base de datos\n(SQLAlchemy)" as DB <<database>>
+
+CLI -> FRM : llena formulario(nombre, email, password, confirmar)
+activate FRM
+FRM -> FRM : valida(campos requeridos, formato email, coinciden passwords)
+alt datos invalidos
+  FRM --> CLI : muestra errores de validacion
+else datos validos
+  FRM -> AC : POST /api/auth/register(email, password)
+  activate AC
+  AC -> SEC : hash_password(password)
+  activate SEC
+  SEC --> AC : hash bcrypt
+  deactivate SEC
+  create entity "User : u1" as U <<entity>>
+  AC -> U : crea(email, hash, is_active=true, first_name, last_name)
+  activate U
+  U -> R : asigna role(nombre="Cliente")
+  activate R
+  R --> U : role_id
+  deactivate R
+  U --> AC : user
+  deactivate U
+  AC -> DB : INSERT users(role_id, is_active)
+  activate DB
+  DB --> AC : ok (user_id)
+  deactivate DB
+  AC --> FRM : 201 Created (UserResponse, RoleResponse)
+  deactivate AC
+  FRM --> CLI : "Registro exitoso" + navega a /auth
+end
+deactivate FRM
+note right of R
+  Role es preexistente: por regla R4
+  se ubica en el eje horizontal.
+end note
+@enduml
+
+
+================================================================================
+CU2 - INICIAR SESION   (Usuario y Autenticacion / Cliente, Admin, Encargado, Cajero)
+================================================================================
+@startuml CU2_IniciarSesion
+title CU2 - Iniciar sesion
+autonumber
+actor "Usuario" as USR <<actor>>
+boundary "LoginForm\n(Angular / Flutter)" as LF <<boundary>>
+control "AuthController\nPOST /api/auth/login" as AC <<control>>
+control "Security\nverify_password + create_access_token" as SEC <<control>>
+entity "User : u1" as U <<entity>>
+entity "Role : r1" as R <<entity>>
+database "Base de datos" as DB <<database>>
+
+USR -> LF : email + password + botón Entrar
+activate LF
+LF -> AC : POST /api/auth/login(email, password)
+activate AC
+AC -> SEC : get_current_user / verificar credenciales
+AC -> DB : SELECT user JOIN role WHERE email=?
+activate DB
+DB --> AC : user(id, hashed_password, is_active, role)
+deactivate DB
+AC -> R : consulta role(nombre)
+activate R
+R --> AC : role_name
+deactivate R
+alt password incorrecto o usuario inactivo
+  AC -> SEC : verify_password(hash, password)
+  SEC --> AC : False
+  AC --> LF : 401 Unauthorized ("Credenciales inválidas")
+else credenciales válidas
+  AC -> SEC : verify_password(hash, password)
+  SEC --> AC : True
+  AC -> SEC : create_access_token(user_id, role, exp)
+  SEC --> AC : token JWT
+  AC --> LF : 200 OK (Token: access_token, token_type="bearer")
+end
+deactivate AC
+LF --> USR : guarda token + navega según role_name
+deactivate LF
+note right of AC
+  get_current_user valida el Bearer token
+  en las peticiones posteriores.
+end note
+@enduml
+
+
+================================================================================
+CU3 - GESTIONAR PERFIL   (Usuario y Autenticacion / Cliente)
+================================================================================
+@startuml CU3_GestionarPerfil
+title CU3 - Gestionar perfil
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "PerfilComponent\n(Angular)" as PF <<boundary>>
+control "AuthController\nGET|PATCH /api/auth/me" as AC <<control>>
+control "Security\nget_current_user" as SEC <<control>>
+entity "User : u1" as U <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> PF : abre "Mi perfil"
+activate PF
+PF -> AC : GET /api/auth/me (Authorization: Bearer)
+activate AC
+AC -> SEC : get_current_user(token)
+activate SEC
+alt token ausente o invalido
+  SEC --> AC : 401 Unauthorized
+  deactivate SEC
+  AC --> PF : 401
+  deactivate AC
+  PF --> CLI : redirige a /auth
+else token valido
+  SEC --> AC : user(u1)
+  deactivate SEC
+  AC -> DB : SELECT user + role
+  DB --> AC : datos de perfil
+  AC --> PF : 200 OK (UserResponse)
+  deactivate AC
+  PF --> CLI : muestra nombre, email, rol
+
+  opt actualizar datos de contacto
+    CLI -> PF : edita(telefono, direccion)
+    PF -> AC : PATCH /api/auth/me(telefono, direccion)
+    activate AC
+    AC -> U : actualiza(telefono, direccion)
+    activate U
+    U --> AC : user actualizado
+    deactivate U
+    AC -> DB : UPDATE users SET ...
+    DB --> AC : ok
+    AC --> PF : 200 OK (UserResponse)
+    deactivate AC
+    PF --> CLI : "Perfil actualizado"
+  end
+end
+deactivate PF
+@enduml
+
+
+================================================================================
+CU4 - GESTIONAR USUARIOS Y ROLES   (Usuarios y roles / Administrador)
+================================================================================
+@startuml CU4_GestionarUsuariosRoles
+title CU4 - Gestionar usuarios y roles
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "AdminComponent\n(sección Usuarios)" as AC <<boundary>>
+control "UsersController\n/api/users" as UC <<control>>
+control "Security\nrequire_admin" as SEC <<control>>
+entity "User : u1" as U <<entity>>
+entity "Role : r1" as R <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> AC : abre pestaña Usuarios
+activate AC
+AC -> UC : GET /api/users/roles
+activate UC
+UC -> SEC : require_admin(token)
+activate SEC
+alt rol != "Administrador"
+  SEC --> UC : 403 Forbidden
+  deactivate SEC
+  UC --> AC : 403 ("Requiere rol de administrador")
+  deactivate UC
+  AC --> ADM : oculta acciones, mensaje 403
+else rol == "Administrador"
+  SEC --> UC : user(admin)
+  deactivate SEC
+  UC -> DB : SELECT roles
+  DB --> UC : lista de roles
+  UC --> AC : 200 OK (RoleResponse[])
+  deactivate UC
+  AC -> UC : GET /api/users
+  activate UC
+  UC -> DB : SELECT users
+  DB --> UC : lista de usuarios
+  UC --> AC : 200 OK (UserResponse[])
+  deactivate UC
+  AC --> ADM : tabla de usuarios y roles
+
+  opt crear usuario
+    ADM -> AC : llena formulario(nombre, email, role_id)
+    AC -> UC : POST /api/users(datos)
+    activate UC
+    create entity "User : u2" as UN <<entity>>
+    UC -> UN : crea(datos, is_active=true)
+    activate UN
+    UN -> R : asigna role(role_id)
+    R --> UN : rol
+    deactivate UN
+    UC -> DB : INSERT users
+    DB --> UC : ok
+    UC --> AC : 201 Created (UserResponse)
+    deactivate UC
+    AC --> ADM : "Usuario creado"
+  end
+
+  opt editar o desactivar usuario
+    ADM -> AC : selecciona acciones(editar / desactivar)
+    AC -> UC : PATCH /api/users/{id} o DELETE /api/users/{id}
+    activate UC
+    UC -> U : actualiza campos / is_active=false
+    activate U
+    U --> UC : user
+    deactivate U
+    UC -> DB : UPDATE users
+    DB --> UC : ok
+    UC --> AC : 200 OK / 204 No Content
+    deactivate UC
+    AC --> ADM : "Cambios guardados"
+  end
+end
+deactivate AC
+note right of UC
+  DELETE es baja logica: is_active = false
+  (no se elimina la fila).
+end note
+@enduml
+
+
+================================================================================
+CU5 - GESTIONAR SUCURSALES   (Sucursales y Ciudades / Administrador)
+================================================================================
+@startuml CU5_GestionarSucursales
+title CU5 - Gestionar sucursales
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "SucursalesComponent\n(Angular)" as BC <<boundary>>
+control "BranchesController\n/api/branches" as BC2 <<control>>
+control "Security\nrequire_admin" as SEC <<control>>
+entity "City : c1" as CTY <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> BC : abre gestión de sucursales
+activate BC
+BC -> BC2 : GET /api/branches
+activate BC2
+BC2 -> DB : SELECT branches WHERE is_active=true
+DB --> BC2 : lista de sucursales
+BC2 --> BC : 200 OK (BranchResponse[])
+deactivate BC2
+BC --> ADM : tabla de sucursales
+
+opt registrar sucursal
+  ADM -> BC : nueva sucursal(nombre, ciudad, direccion, telefono)
+  BC -> BC2 : POST /api/branches(datos)
+  activate BC2
+  BC2 -> CTY : valida ciudad(city_id)
+  activate CTY
+  CTY --> BC2 : ciudad válida
+  deactivate CTY
+  create entity "Branch : b1" as BR <<entity>>
+  BC2 -> BR : crea(nombre, city_id, direccion, is_active=true)
+  activate BR
+  BR --> BC2 : branch
+  deactivate BR
+  BC2 -> DB : INSERT branches
+  DB --> BC2 : ok (branch_id)
+  BC2 --> BC : 201 Created (BranchResponse)
+  deactivate BC2
+  BC --> ADM : "Sucursal registrada"
+end
+
+opt editar sucursal
+  ADM -> BC : edita datos de la sucursal
+  BC -> BC2 : PATCH /api/branches/{id}(datos)
+  activate BC2
+  BC2 -> DB : UPDATE branches
+  DB --> BC2 : ok
+  BC2 --> BC : 200 OK (BranchResponse)
+  deactivate BC2
+  BC --> ADM : "Sucursal actualizada"
+end
+
+opt desactivar sucursal
+  ADM -> BC : pulsa Desactivar
+  BC -> BC2 : DELETE /api/branches/{id}
+  activate BC2
+  BC2 -> DB : UPDATE branches SET is_active=false
+  DB --> BC2 : ok
+  BC2 --> BC : 204 No Content
+  deactivate BC2
+  BC --> ADM : "Sucursal desactivada"
+end
+deactivate BC
+note right of DB
+  La baja es lógica: la sucursal deja de
+  listarse pero conserva sus pedidos.
+end note
+@enduml
+
+
+================================================================================
+CU6 - CONSULTAR SUCURSALES POR CIUDAD   (Sucursales y Ciudades / Cliente, Admin)
+================================================================================
+@startuml CU6_ConsultarSucursalesCiudad
+title CU6 - Consultar sucursales por ciudad
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "SucursalesComponent\n(Angular / Flutter)" as BC <<boundary>>
+control "BranchesController\nGET /api/branches" as BC2 <<control>>
+entity "City : c1" as CTY <<entity>>
+entity "Branch : b1" as BR <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> BC : selecciona ciudad en el buscador
+activate BC
+BC -> BC2 : GET /api/branches?city={nombre}
+activate BC2
+BC2 -> DB : SELECT branches JOIN cities\nWHERE city LIKE ? AND is_active=true
+activate DB
+DB --> BC2 : lista de sucursales
+deactivate DB
+loop por cada sucursal devuelta
+  BC2 -> CTY : lee city(nombre)
+  activate CTY
+  CTY --> BC2 : nombre de la ciudad
+  deactivate CTY
+  BC2 -> BR : arma BranchResponse(direccion, telefono, horario)
+  activate BR
+  BR --> BC2 : datos de la sucursal
+  deactivate BR
+end
+alt no hay coincidencias
+  BC2 --> BC : 200 OK (lista vacía)
+else hay coincidencias
+  BC2 --> BC : 200 OK (BranchResponse[])
+end
+deactivate BC2
+BC --> CLI : muestra sucursales con dirección y mapa
+deactivate BC
+@enduml
+
+
+================================================================================
+CU7 - GESTIONAR PRODUCTOS   (Catalogo de Productos / Administrador)
+================================================================================
+@startuml CU7_GestionarProductos
+title CU7 - Gestionar productos (incluye categorias, temporadas, colecciones)
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "ProductosComponent\n(Angular)" as PC <<boundary>>
+control "ProductsController\n/api/products" as PC2 <<control>>
+entity "Product : p1" as P <<entity>>
+entity "Category : cat1" as C <<entity>>
+entity "ProductVariant : v1\n(talla/color)" as V <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> PC : abre catálogo administrativo
+activate PC
+PC -> PC2 : GET /api/products/metadata/categories\n+ /seasons + /sizes + /colors
+activate PC2
+PC2 -> DB : SELECT metadatos
+DB --> PC2 : categorías, temporadas, tallas, colores
+PC2 --> PC : 200 OK (listas de metadatos)
+deactivate PC2
+PC --> ADM : formulario con catálogos de apoyo
+
+opt crear producto
+  ADM -> PC : nuevo producto(nombre, categoría, temporada, colección, proveedor)
+  PC -> PC2 : POST /api/products(datos)
+  activate PC2
+  PC2 -> C : valida category_id
+  activate C
+  C --> PC2 : categoría válida
+  deactivate C
+  create entity "Product : p1" as P <<entity>>
+  PC2 -> P : crea(nombre, slug, base_price, is_active=true)
+  activate P
+  P --> PC2 : product
+  deactivate P
+  PC2 -> DB : INSERT products
+  DB --> PC2 : ok (product_id)
+  PC2 --> PC : 201 Created (ProductResponse)
+  deactivate PC2
+  PC --> ADM : "Producto creado"
+end
+
+opt crear variantes (talla/color)
+  ADM -> PC : agrega variante(talla, color, stock inicial)
+  PC -> PC2 : POST /api/products/{id}/variants
+  activate PC2
+  create entity "ProductVariant : v1" as V <<entity>>
+  PC2 -> V : crea(size_name, color_name, sku, effective_price)
+  activate V
+  V --> PC2 : variant
+  deactivate V
+  PC2 -> DB : INSERT product_variants
+  DB --> PC2 : ok
+  PC2 --> PC : 201 Created (ProductVariantResponse)
+  deactivate PC2
+  PC --> ADM : "Variante agregada"
+end
+
+opt editar o desactivar producto
+  ADM -> PC : edita / Desactiva
+  PC -> PC2 : PATCH /api/products/{id} o DELETE /api/products/{id}
+  activate PC2
+  PC2 -> P : actualiza / is_active=false
+  activate P
+  P --> PC2 : product
+  deactivate P
+  PC2 -> DB : UPDATE products
+  DB --> PC2 : ok
+  PC2 --> PC : 200 OK / 204 No Content
+  deactivate PC2
+  PC --> ADM : "Cambios guardados"
+end
+deactivate PC
+@enduml
+
+
+================================================================================
+CU8 - GESTIONAR TEMPORADAS Y COLECCIONES   (Catalogo / Administrador)
+================================================================================
+@startuml CU8_TemporadasColecciones
+title CU8 - Gestionar temporadas y colecciones
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "TemporadasComponent\n(Angular)" as TC <<boundary>>
+control "ProductsController\n/api/products/metadata" as PC <<control>>
+entity "Season : s1" as S <<entity>>
+entity "Collection : col1" as COL <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> TC : abre Temporadas y Colecciones
+activate TC
+TC -> PC : GET /api/products/metadata/seasons\n+ /metadata/collections
+activate PC
+PC -> DB : SELECT seasons / collections
+DB --> PC : listas existentes
+PC --> TC : 200 OK
+deactivate PC
+TC --> ADM : tabla de temporadas y colecciones
+
+opt crear temporada
+  ADM -> TC : nueva temporada(nombre, anio, fecha_inicio, fecha_fin)
+  TC -> PC : POST /api/products/metadata/seasons
+  activate PC
+  create entity "Season : s1" as S <<entity>>
+  PC -> S : crea(nombre, anio, rango de fechas)
+  activate S
+  S --> PC : season
+  deactivate S
+  PC -> DB : INSERT seasons
+  DB --> PC : ok
+  PC --> TC : 201 Created (SeasonResponse)
+  deactivate PC
+  TC --> ADM : "Temporada creada"
+end
+
+opt crear colección
+  ADM -> TC : nueva colección(nombre, temporada)
+  TC -> PC : POST /api/products/metadata/collections
+  activate PC
+  create entity "Collection : col1" as COL <<entity>>
+  PC -> COL : crea(nombre, season_id)
+  activate COL
+  COL --> PC : collection
+  deactivate COL
+  PC -> DB : INSERT collections
+  DB --> PC : ok
+  PC --> TC : 201 Created (CollectionResponse)
+  deactivate PC
+  TC --> ADM : "Colección creada"
+end
+
+opt editar o eliminar
+  ADM -> TC : edita / elimina registro
+  TC -> PC : PATCH o DELETE /api/products/metadata/{recurso}/{id}
+  activate PC
+  PC -> DB : UPDATE / DELETE
+  DB --> PC : ok
+  PC --> TC : 200 OK / 204 No Content
+  deactivate PC
+  TC --> ADM : "Registro actualizado"
+end
+deactivate TC
+@enduml
+
+
+================================================================================
+CU9 - GESTIONAR PROVEEDORES   (Proveedores / Administrador y Proveedor)
+================================================================================
+@startuml CU9_GestionarProveedores
+title CU9 - Gestionar proveedores
+autonumber
+actor "Administrador" as ADM <<actor>>
+actor "Proveedor" as PRV <<actor>>
+boundary "PortalComponent\n(Angular)" as PP <<boundary>>
+control "ProvidersController\n/api/providers" as PC <<control>>
+entity "Provider : pv1" as PV <<entity>>
+entity "Proposal : pr1" as PR <<entity>>
+entity "Product : p1" as P <<entity>>
+database "Base de datos" as DB <<database>>
+
+group Sesion del proveedor
+  PRV -> PP : entra a /providers
+  PP -> PC : GET /api/providers/me
+  activate PC
+  PC -> DB : SELECT provider (perfil del usuario)
+  DB --> PC : ProviderMeResponse
+  PC --> PP : 200 OK
+  deactivate PC
+  PP --> PRV : muestra perfil y productos publicados
+end
+
+group El proveedor propone un producto
+  PRV -> PP : crea propuesta(nombre, precio, categoría)
+  PP -> PC : POST /api/providers/products(ProposalCreate)
+  activate PC
+  create entity "Proposal : pr1" as PR <<entity>>
+  PC -> PR : crea(estado="PENDIENTE", provider_id)
+  activate PR
+  PR --> PC : proposal
+  deactivate PR
+  PC -> DB : INSERT proposals
+  DB --> PC : ok
+  PC --> PP : 201 Created (ProposalResponse)
+  deactivate PC
+  PP --> PRV : "Propuesta enviada a revisión"
+end
+
+group El administrador revisa la propuesta
+  ADM -> PP : abre bandeja de propuestas
+  PP -> PC : GET /api/providers/proposals
+  activate PC
+  PC -> DB : SELECT proposals WHERE estado='PENDIENTE'
+  DB --> PC : lista de propuestas
+  PC --> PP : 200 OK (ProposalResponse[])
+  deactivate PC
+  PP --> ADM : lista pendientes
+
+  opt aprobar propuesta
+    ADM -> PP : Aprueba
+    PP -> PC : PATCH /api/providers/proposals/{id}/approve
+    activate PC
+    PC -> PR : actualiza(estado="APROBADA")
+    activate PR
+    PR --> PC : proposal
+    deactivate PR
+    create entity "Product : p1" as P <<entity>>
+    PC -> P : crea producto aprobado(is_active=true)
+    activate P
+    P --> PC : product
+    deactivate P
+    PC -> DB : UPDATE proposals + INSERT products
+    DB --> PC : ok
+    PC --> PP : 200 OK (ProposalResponse)
+    deactivate PC
+    PP --> ADM : "Propuesta aprobada y producto creado"
+  end
+
+  opt rechazar propuesta
+    ADM -> PP : Rechaza
+    PP -> PC : PATCH /api/providers/proposals/{id}/reject
+    activate PC
+    PC -> PR : actualiza(estado="RECHAZADA")
+    activate PR
+    PR --> PC : proposal
+    deactivate PR
+    PC -> DB : UPDATE proposals
+    DB --> PC : ok
+    PC --> PP : 200 OK
+    deactivate PC
+    PP --> ADM : "Propuesta rechazada"
+  end
+end
+deactivate PP
+@enduml
+
+
+================================================================================
+CU10 - CONSULTAR CATALOGO Y BUSCAR PRENDAS   (Consulta de Catalogo / Cliente)
+================================================================================
+@startuml CU10_ConsultarCatalogo
+title CU10 - Consultar catálogo y buscar prendas
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CatalogoComponent\n(Angular / Flutter)" as CC <<boundary>>
+control "ProductsController\nGET /api/products" as PC <<control>>
+entity "Product : p1" as P <<entity>>
+entity "ProductVariant : v1" as V <<entity>>
+entity "Category : cat1" as C <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> CC : abre el catálogo
+activate CC
+CC -> PC : GET /api/products?categoria=&temporada=&talla=&color=
+activate PC
+PC -> DB : SELECT products JOIN variants\nWHERE filtros AND is_active=true
+activate DB
+DB --> PC : filas de productos
+deactivate DB
+loop por cada producto del resultado
+  PC -> P : arma ProductResponse(nombre, precio base, imagen)
+  activate P
+  P --> PC : datos del producto
+  deactivate P
+  PC -> V : lee variantes(talla, color, stock)
+  activate V
+  V --> PC : lista de variantes
+  deactivate V
+end
+PC --> CC : 200 OK (ProductResponse[] + metadatos de paginación)
+deactivate PC
+CC --> CLI : galería filtrable de prendas
+
+CLI -> CC : escribe texto en el buscador("vestido")
+CC -> PC : GET /api/products?search=vestido
+activate PC
+PC -> DB : SELECT ... WHERE nombre LIKE '%vestido%'
+DB --> PC : coincidencias
+PC --> CC : 200 OK (ProductResponse[])
+deactivate PC
+CC --> CLI : resultados de la búsqueda
+deactivate CC
+@enduml
+
+
+================================================================================
+CU11 - CONSULTAR DISPONIBILIDAD POR SUCURSAL   (Consulta de Catalogo / Cliente)
+================================================================================
+@startuml CU11_ConsultarDisponibilidad
+title CU11 - Consultar disponibilidad por sucursal
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "DetalleProducto\n(Angular / Flutter)" as DC <<boundary>>
+control "InventoryController\nGET /api/inventory/availability" as IC <<control>>
+entity "Branch : b1" as BR <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "ProductVariant : v1" as V <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> DC : abre detalle de la prenda
+activate DC
+DC -> IC : GET /api/inventory/availability?variant_id={v1}
+activate IC
+IC -> DB : SELECT inventory JOIN branches\nWHERE variant_id=? AND is_active=true
+activate DB
+DB --> IC : existencias por sucursal
+deactivate DB
+loop por cada fila de inventario
+  IC -> INV : lee available, reserved
+  activate INV
+  INV --> IC : cantidad disponible
+  deactivate INV
+  IC -> BR : lee nombre y dirección de la sucursal
+  activate BR
+  BR --> IC : datos de la sucursal
+  deactivate BR
+end
+alt sin existencias en ninguna sucursal
+  IC --> DC : 200 OK (lista vacía)
+  DC --> CLI : "Prenda agotada"
+else con existencias
+  IC --> DC : 200 OK (AvailabilityResponse[])
+  deactivate IC
+  DC --> CLI : tabla de disponibilidad por sucursal
+end
+deactivate DC
+@enduml
+
+
+================================================================================
+CU12 - USAR VESTIDOR VIRTUAL (AR)   (Vestidor Virtual AR / Cliente)
+================================================================================
+@startuml CU12_VestidorAR
+title CU12 - Usar vestidor virtual (AR)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "VestidorComponent\n(Angular)" as VES <<boundary>>
+control "ApiService\nGET /api/products/{id}" as API <<control>>
+control "MediaPipe\nPoseLandmarker (this.detector)" as MP <<control>>
+entity "Product : p1" as P <<entity>>
+entity "Landmark : lm1\n(hombros, cuello, caderas)" as LM <<entity>>
+entity "GARMENT_PATH\n(constante de silueta 210x250)" as GP <<entity>>
+entity "Canvas offscreen\n210 x 250" as CV <<entity>>
+entity "Landmark : lm2\n(siguiente frame)" as LM2 <<entity>>
+entity "Imagen capturada\n(Blob data URL)" as IMG <<entity>>
+database "IndexedDB / caché local" as IDB <<database>>
+
+CLI -> VES : abre el vestidor y elige la prenda
+activate VES
+VES -> API : GET /api/products/{id}
+activate API
+API --> VES : 200 OK (ProductResponse con imagen)
+deactivate API
+VES -> VES : carga la foto de la prenda\ny aplica GARMENT_PATH al recorte
+
+CLI -> VES : autoriza el uso de la cámara
+VES -> VES : getUserMedia({ video: { facingMode: "user" } })
+VES -> MP : inicializa detector(pose_landmarker)
+activate MP
+MP --> VES : detector listo
+deactivate MP
+
+loop por cada frame de video (continuo)
+  VES -> MP : detectForVideo(videoFrame)
+  activate MP
+  MP -> LM : crea landmarks del frame
+  activate LM
+  LM --> MP : 33 puntos de pose
+  deactivate LM
+  MP -> VES : onResults(results)
+  activate VES
+  VES -> LM : lee hombros(11,12) y cadera(23,24)
+  activate LM
+  LM --> VES : shoulderWidth, shoulderCenter, neckY
+  deactivate LM
+  VES -> GP : fit = shoulderWidth / GARMENT_SHOULDER_SPAN
+  activate GP
+  GP --> VES: escala de la silueta (acotada 0.2 - 3.0)
+  deactivate GP
+  VES -> CV : paintOverlay(translate, fit, objectPosition)
+  activate CV
+  CV -> CV : clipPath(Path2D(GARMENT_PATH))
+  CV -> VES : canvas renderizado
+  deactivate CV
+  VES --> CLI : muestra la prenda superpuesta en pantalla
+  deactivate VES
+  destroy LM
+end
+
+opt capturar la prueba
+  CLI -> VES : pulsa Capturar
+  activate VES
+  VES -> CV : toDataURL(image/png)
+  activate CV
+  CV --> VES : data URL de la imagen
+  deactivate CV
+  create entity "Imagen capturada\n(Blob data URL)" as IMG <<entity>>
+  VES -> IMG : guarda captura
+  activate IMG
+  IMG -> IDB : almacena(blob)
+  IDB --> IMG : ok
+  deactivate IMG
+  IMG --> VES : prueba guardada
+  destroy IMG
+  VES --> CLI : ofrece descargar o compartir
+  deactivate VES
+end
+
+CLI -> VES : cierra el vestidor
+VES -> MP : destroy detector
+deactivate VES
+note right of MP
+  MediaPipe y las capturas son objetos
+  transitorios: se destruyen (regla R5).
+  Product y sus variantes persisten.
+end note
+@enduml
+
+
+================================================================================
+CU13 - RESERVAR PRENDAS   (Reserva de Prendas / Cliente)
+================================================================================
+@startuml CU13_ReservarPrendas
+title CU13 - Reservar prendas
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "ReservasComponent\n(Angular / Flutter)" as RC <<boundary>>
+control "CommerceController\nPOST /api/reservations" as CC <<control>>
+entity "Branch : b1" as BR <<entity>>
+entity "Reservation : r1" as R <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "StockMovement : sm1" as SM <<entity>>
+entity "Notification : n1" as N <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> RC : elige sucursal, prendas y horas de reserva
+activate RC
+RC -> CC : POST /api/reservations(branch_id, items[], expiration_hours)
+activate CC
+CC -> BR : valida sucursal(is_active)
+activate BR
+alt sucursal inexistente o inactiva
+  BR --> CC : None
+  deactivate BR
+  CC --> RC : 404 "Sucursal no encontrada"
+else sucursal válida
+  BR --> CC : branch(b1)
+  deactivate BR
+  create entity "Reservation : r1" as R <<entity>>
+  CC -> R : crea(code="RSV-AAAAMMDD-XXXXXX",\nstatus="PENDIENTE", expiration_date)
+  activate R
+  R --> CC : reservation
+  deactivate R
+  CC -> DB : INSERT reservations
+  DB --> CC : ok (reservation_id)
+
+  loop por cada prenda solicitada
+    CC -> INV : _get_inventory(variant_id, branch_id, for_update=true)
+    activate INV
+    alt inventario insuficiente
+      INV --> CC : available < quantity
+      deactivate INV
+      CC --> RC : 409 Conflict "Stock insuficiente de 'prenda'"
+    else inventario suficiente
+      INV --> CC : inventory(inv1)
+      deactivate INV
+      CC -> R : agrega ReservationItem(variant_id, quantity, unit_price)
+      activate R
+      R --> CC : item agregado
+      deactivate R
+      CC -> SM : _movement(tipo="RESERVA", delta=-cantidad, motivo)
+      activate SM
+      SM --> CC : movimiento registrado
+      deactivate SM
+      CC -> DB : INSERT reservation_items + INSERT stock_movements
+      DB --> CC : ok
+    end
+  end
+
+  opt notificar al cliente y al personal
+    CC -> N : _notify(cliente, "Reserva creada", ...)
+    activate N
+    N --> CC : notificación
+    deactivate N
+    CC -> N : _notify(Administradores y Encargados, "Nueva reserva", ...)
+    activate N
+    N --> CC : notificación
+    deactivate N
+    CC -> DB : INSERT notifications
+    DB --> CC : ok
+  end
+
+  CC -> DB : COMMIT
+  DB --> CC : ok
+  CC --> RC : 201 Created (ReservationResponse)
+  deactivate CC
+  RC --> CLI : muestra código RSV-... y fecha de vencimiento
+end
+deactivate RC
+note right of R
+  La reserva retiene stock mediante
+  movimientos, no lo descuenta.
+end note
+@enduml
+
+
+================================================================================
+CU14 - GESTIONAR RESERVA: CONSULTAR Y CANCELAR   (Reserva de Prendas / Cliente)
+================================================================================
+@startuml CU14_GestionarReserva
+title CU14 - Gestionar reserva (consultar / cancelar)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "MisReservasComponent\n(Angular / Flutter)" as RC <<boundary>>
+control "CommerceController\n/api/reservations" as CC <<control>>
+control "Security\nget_current_user" as SEC <<control>>
+entity "Reservation : r1" as R <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "StockMovement : sm1" as SM <<entity>>
+database "Base de datos" as DB <<database>>
+
+group Consultar mis reservas
+  CLI -> RC : abre "Mis reservas"
+  RC -> CC : GET /api/reservations
+  activate CC
+  CC -> SEC : get_current_user(token)
+  activate SEC
+  SEC --> CC : user(u1)
+  deactivate SEC
+  CC -> DB : SELECT reservations WHERE client_id=u1
+  DB --> CC : lista de reservas
+  CC --> RC : 200 OK (ReservationResponse[])
+  deactivate CC
+  RC --> CLI : tabla de reservas con estado y vencimiento
+
+  opt ver detalle
+    CLI -> RC : selecciona una reserva
+    RC -> CC : GET /api/reservations/{id}
+    activate CC
+    CC -> DB : SELECT reservation + items
+    DB --> CC : detalle
+    CC --> RC : 200 OK (ReservationResponse)
+    deactivate CC
+    RC --> CLI : detalle de la reserva
+  end
+end
+
+group Cancelar una reserva
+  CLI -> RC : pulsa "Cancelar reserva"
+  RC -> CC : PATCH /api/reservations/{id}/cancel
+  activate CC
+  CC -> DB : SELECT reservation
+  DB --> CC : reservation(r1)
+  alt la reserva no pertenece al usuario y no es personal
+    CC --> RC : 403 "No puedes cancelar esta reserva"
+  else la reserva ya venció
+    CC -> R : _expire_late(...) marca VENCIDA
+    activate R
+    R --> CC : status="VENCIDA"
+    deactivate R
+    CC -> DB : UPDATE reservations
+    CC --> RC : 400 "La reserva ya venció; no se puede cancelar"
+  else la reserva no está PENDIENTE
+    CC --> RC : 400 "Solo se cancelan reservas pendientes"
+  else cancelación válida
+    CC -> R : actualiza status="CANCELADA"
+    activate R
+    R --> CC : reservation
+    deactivate R
+    CC -> INV : _release_reserved_stock(reserva)
+    activate INV
+    INV --> CC : inventario liberado
+    deactivate INV
+    CC -> SM : _movement(tipo="LIBERACION", delta=+cantidad)
+    activate SM
+    SM --> CC : movimiento
+    deactivate SM
+    CC -> DB : UPDATE reservations + stock_movements + notifications
+    DB --> CC : ok
+    CC --> RC : 200 OK (ReservationResponse con status=CANCELADA)
+  end
+  deactivate CC
+  RC --> CLI : "Reserva cancelada"
+end
+deactivate RC
+@enduml
+
+
+================================================================================
+CU15 - ATENDER RESERVA EN SUCURSAL   (Reserva de Prendas / Encargado, Cajero)
+================================================================================
+@startuml CU15_AtenderReserva
+title CU15 - Atender reserva en sucursal
+autonumber
+actor "Encargado de Sucursal" as ENC <<actor>>
+boundary "SucursalComponent\n(Angular - panel sucursal)" as PC <<boundary>>
+control "CommerceController\nPATCH /api/reservations/{id}/attend" as CC <<control>>
+control "Security\nrequire_staff" as SEC <<control>>
+entity "Reservation : r1" as R <<entity>>
+entity "Notification : n1" as N <<entity>>
+database "Base de datos" as DB <<database>>
+
+ENC -> PC : abre reservas de la sucursal
+activate PC
+PC -> CC : PATCH /api/reservations/{id}/attend
+activate CC
+CC -> SEC : require_staff(token)
+activate SEC
+alt rol no es Administrador, Encargado ni Cajero
+  SEC --> CC : 403 Forbidden
+  deactivate SEC
+  CC --> PC : 403 "Requiere personal de sucursal"
+  deactivate CC
+  PC --> ENC : "Solo personal autorizado"
+else personal autorizado
+  SEC --> CC : user(encargado)
+  deactivate SEC
+  CC -> DB : SELECT reservation
+  DB --> CC : reservation(r1)
+  alt reserva inexistente
+    CC --> PC : 404 "Reserva no encontrada"
+  else reserva vencida
+    CC -> R : _expire_late(...) marca VENCIDA
+    activate R
+    R --> CC : status="VENCIDA"
+    deactivate R
+    CC -> DB : UPDATE reservations
+    CC --> PC : 400 "La reserva venció; ya no se puede atender"
+  else reserva no PENDIENTE
+    CC --> PC : 400 "Solo reservas pendientes vigentes"
+  else reserva vigente
+    CC -> R : actualiza status="ATENDIDA", attend_date=ahora
+    activate R
+    R --> CC : reservation
+    deactivate R
+    CC -> N : _notify(cliente, "Reserva entregada", ...)
+    activate N
+    N --> CC : notificación
+    deactivate N
+    CC -> DB : UPDATE reservations + INSERT notifications
+    DB --> CC : ok
+    CC --> PC : 200 OK (ReservationResponse con status=ATENDIDA)
+  end
+  deactivate CC
+  PC --> ENC : "Reserva entregada correctamente"
+end
+deactivate PC
+note right of R
+  El stock ya estaba retenido al crear la
+  reserva (CU13); aquí solo se confirma
+  la entrega.
+end note
+@enduml
+
+
+================================================================================
+CU16 - GESTIONAR CARRITO DE COMPRAS   (Carrito y Compra Digital / Cliente)
+================================================================================
+@startuml CU16_GestionarCarrito
+title CU16 - Gestionar carrito de compras
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CarritoComponent\n(Angular / Flutter)" as CC <<boundary>>
+control "CommerceController\n/api/cart" as CC2 <<control>>
+entity "Cart : c1" as C <<entity>>
+entity "CartItem : ci1" as CI <<entity>>
+entity "ProductVariant : v1" as V <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> CC : abre el carrito
+activate CC
+CC -> CC2 : GET /api/cart
+activate CC2
+CC2 -> C : _get_or_create_cart(u1)
+activate C
+C --> CC2 : cart(c1)
+deactivate C
+loop por cada CartItem del carrito
+  CC2 -> CI : lee item(cantidad)
+  activate CI
+  CI --> CC2 : cart_item
+  deactivate CI
+  CC2 -> V : lee variante(nombre, talla, color, effective_price)
+  activate V
+  V --> CC2 : producto y precio
+  deactivate V
+  CC2 -> INV : consulta disponibilidad en la sucursal elegida
+  activate INV
+  INV --> CC2 : available
+  deactivate INV
+end
+CC2 --> CC : 200 OK (CartSummary con totales)
+deactivate CC2
+CC --> CLI : lista de prendas y total
+
+opt agregar prenda
+  CLI -> CC : pulsa "Agregar al carrito"
+  CC -> CC2 : POST /api/cart(variant_id, quantity, branch_id)
+  activate CC2
+  CC2 -> INV : valida stock disponible
+  activate INV
+  alt no hay stock suficiente
+    INV --> CC2 : available < quantity
+    deactivate INV
+    CC2 --> CC : 409 "Stock insuficiente"
+  else stock disponible
+    INV --> CC2 : ok
+    deactivate INV
+    CC2 -> CI : crea o acumula CartItem
+    activate CI
+    CI --> CC2 : cart_item
+    deactivate CI
+    CC2 -> DB : INSERT / UPDATE cart_items
+    DB --> CC2 : ok
+    CC2 --> CC : 201 Created (CartSummary)
+    deactivate CC2
+    CC --> CLI : "Prenda agregada"
+  end
+end
+
+opt editar cantidad
+  CLI -> CC : cambia la cantidad
+  CC -> CC2 : PATCH /api/cart/{item_id}(quantity)
+  activate CC2
+  CC2 -> CI : actualiza cantidad
+  activate CI
+  CI --> CC2 : cart_item
+  deactivate CI
+  CC2 -> DB : UPDATE cart_items
+  DB --> CC2 : ok
+  CC2 --> CC : 200 OK (CartSummary)
+  deactivate CC2
+  CC --> CLI : total recalculado
+end
+
+opt quitar prenda
+  CLI -> CC : pulsa eliminar
+  CC -> CC2 : DELETE /api/cart/{item_id}
+  activate CC2
+  CC2 -> DB : DELETE cart_items
+  DB --> CC2 : ok
+  CC2 --> CC : 200 OK (CartSummary)
+  deactivate CC2
+  CC --> CLI : prenda quitada
+end
+
+opt vaciar carrito
+  CLI -> CC : pulsa "Vaciar carrito"
+  CC -> CC2 : DELETE /api/cart
+  activate CC2
+  CC2 -> DB : DELETE cart_items del cliente
+  DB --> CC2 : ok
+  CC2 --> CC : 200 OK (CartSummary vacío)
+  deactivate CC2
+  CC --> CLI : carrito vacío
+end
+deactivate CC
+@enduml
+
+
+================================================================================
+CU17 - CONFIRMAR COMPRA DIGITAL   (Carrito y Compra Digital / Cliente)
+================================================================================
+@startuml CU17_ConfirmarCompraDigital
+title CU17 - Confirmar compra digital (web / movil)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CheckoutComponent\n(Angular / Flutter)" as CH <<boundary>>
+control "CommerceController\nPOST /api/orders/checkout" as CC <<control>>
+control "promotions\npromotion_discount_for_variant" as PRO <<control>>
+entity "CartItem : ci1" as CI <<entity>>
+entity "Branch : b1" as BR <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> CH : confirma el pedido(método de pago, sucursal, dirección)
+activate CH
+CH -> CC : POST /api/orders/checkout(order_type="DIGITAL", ...)
+activate CC
+
+CC -> CI : lee carrito del cliente(u1)
+activate CI
+alt carrito vacío
+  CI --> CC : []
+  deactivate CI
+  CC --> CH : 400 "El carrito está vacío"
+else carrito con productos
+  CI --> CC : cart_items[]
+  deactivate CI
+  CC -> BR : valida sucursal(is_active)
+  activate BR
+  alt sucursal inexistente o inactiva
+    BR --> CC : None
+    deactivate BR
+    CC --> CH : 404 "Sucursal no encontrada"
+  else sucursal válida
+    BR --> CC : branch(b1)
+    deactivate BR
+    create entity "Order : o1" as O <<entity>>
+    CC -> O : crea(status="PENDIENTE", type="DIGITAL", cliente)
+    activate O
+    O --> CC : order
+    deactivate O
+    CC -> DB : INSERT orders
+    DB --> CC : ok (order_id)
+
+    loop por cada item del carrito
+      CC -> INV : _get_inventory(variant_id, branch_id, for_update=true)
+      activate INV
+      alt stock insuficiente
+        INV --> CC : available < quantity
+        deactivate INV
+        CC --> CH : 409 "Stock insuficiente de 'prenda' en 'sucursal'"
+      else stock suficiente
+        INV --> CC : inventory(inv1)
+        deactivate INV
+        CC -> PRO : promotion_discount_for_variant(variant)
+        activate PRO
+        PRO --> CC : promotion_id, descuento por unidad
+        deactivate PRO
+        CC -> O : agrega OrderItem(variant, cantidad,\nprecio, descuento)
+        activate O
+        O --> CC : order.total acumulado
+        deactivate O
+        CC -> DB : INSERT order_items
+        DB --> CC : ok
+      end
+    end
+
+    CC -> CI : vacía el carrito
+    activate CI
+    CI --> CC : ok
+    deactivate CI
+    CC -> DB : DELETE cart_items
+
+    CC -> CC : CU19 _process_payment(orden, método, tarjeta)
+    CC --> CH : 201 Created (OrderResponse)
+    deactivate CC
+    CH --> CLI : muestra comprobante y número de pedido
+  end
+end
+deactivate CH
+note right of O
+  El descuento de stock ocurre al CONFIRMAR
+  el pago (ver CU19 y CU20), no aquí.
+end note
+@enduml
+
+
+================================================================================
+CU18 - REGISTRAR VENTA PRESENCIAL   (Compra Presencial y Punto de Cajero / Cajero)
+================================================================================
+@startuml CU18_RegistrarVentaPresencial
+title CU18 - Registrar venta presencial (Punto de venta)
+autonumber
+actor "Cajero" as CAJ <<actor>>
+boundary "POSComponent\n(Angular - punto de venta)" as POS <<boundary>>
+control "CommerceController\nPOST /api/pos/sale" as CC <<control>>
+control "Security\nrequire_staff" as SEC <<control>>
+entity "User : mostrador\n(cliente genérico)" as MO <<entity>>
+entity "Branch : b1" as BR <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "Order : o1" as O <<entity>>
+database "Base de datos" as DB <<database>>
+
+CAJ -> POS : elige prendas y registra la venta(EFECTIVO)
+activate POS
+POS -> CC : POST /api/pos/sale(items[], branch_id, payment_method="EFECTIVO")
+activate CC
+CC -> SEC : require_staff(token)
+activate SEC
+alt rol no autorizado
+  SEC --> CC : 403 Forbidden
+  deactivate SEC
+  CC --> POS : 403
+  deactivate CC
+  POS --> CAJ : "Solo personal autorizado"
+else personal autorizado
+  SEC --> CC : user(cajero)
+  deactivate SEC
+  CC -> MO : _get_or_create_mostrador()
+  activate MO
+  MO --> CC : user(mostrador@fashionstore.com)
+  deactivate MO
+  CC -> BR : valida sucursal
+  activate BR
+  BR --> CC : branch(b1)
+  deactivate BR
+  create entity "Order : o1" as O <<entity>>
+  CC -> O : crea(type="PRESENCIAL", status="PENDIENTE", branch, mostrador)
+  activate O
+  O --> CC : order
+  deactivate O
+  CC -> DB : INSERT orders
+  DB --> CC : ok (order_id)
+
+  loop por cada prenda vendida
+    CC -> INV : _get_inventory(variant_id, branch_id, for_update=true)
+    activate INV
+    INV --> CC : inventory(inv1)
+    deactivate INV
+    CC -> O : agrega OrderItem(variante, cantidad, precio)
+    activate O
+    O --> CC : order.total
+    deactivate O
+    CC -> DB : INSERT order_items
+    DB --> CC : ok
+  end
+
+  CC -> CC : _process_payment(método="EFECTIVO")
+  CC -> CC : CU20 _complete_order_sale -> _deduct_order_stock
+  CC -> DB : UPDATE order_items, status="PAGADO", movements, notifications
+  DB --> CC : ok
+  CC --> POS : 200 OK (OrderResponse con estado PAGADO)
+  deactivate CC
+  POS --> CAJ : imprime comprobante de venta
+end
+deactivate POS
+note right of O
+  El efectivo se marca COMPLETADO con un
+  identificador pi_cash_ y se descuenta
+  el stock en la misma operación.
+end note
+@enduml
+
+
+================================================================================
+CU19 - PROCESAR PAGO ELECTRONICO   (Pasarela de Pagos / Sistema y Cliente)
+================================================================================
+@startuml CU19_ProcesarPago
+title CU19 - Procesar pago electronico
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CheckoutComponent\n(Angular / Flutter)" as CH <<boundary>>
+control "CommerceController\nPOST /api/orders/{id}/pay" as CC <<control>>
+control "payments\nget_gateway()" as PAY <<control>>
+entity "PaymentGateway : gw1" as GW <<entity>>
+entity "GatewayResult : gr1" as GR <<entity>>
+entity "Order : o1" as O <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> CH : paga el pedido pendiente(método, tarjeta)
+activate CH
+CH -> CC : POST /api/orders/{order_id}/pay(payment_method, card_number)
+activate CC
+CC -> O : _process_payment(orden, método, tarjeta)
+activate O
+create entity "Payment : pay1" as P <<entity>>
+O -> P : crea(amount=orden.total, status="PENDIENTE")
+activate P
+P --> O : payment
+deactivate P
+O -> PAY : get_gateway()
+activate PAY
+PAY --> O : SandboxPaymentGateway (gw1)
+deactivate PAY
+
+alt método == "EFECTIVO"
+  O -> P : status="COMPLETADO", paid_at=ahora
+  activate P
+  P --> O : payment
+  deactivate P
+else tarjeta o transferencia
+  O -> GW : charge(amount, method, {card_number})
+  activate GW
+  create entity "GatewayResult : gr1" as GR <<entity>>
+  GW -> GR : crea(transaction_id, success)
+  activate GR
+  GR --> GW : resultado
+  deactivate GR
+  GW --> O : GatewayResult
+  deactivate GW
+  alt pago aceptado
+    O -> P : status="COMPLETADO",\nstripe_payment_id=transaction_id
+    activate P
+    P --> O : payment
+    deactivate P
+    O -> O : _complete_order_sale(orden, usuario)\n-> _deduct_order_stock (CU20)
+  else pago rechazado
+    O -> P : status="FALLIDO",\nstripe_payment_id=transaction_id
+    activate P
+    P --> O : payment
+    deactivate P
+    note right of P
+      El stock NUNCA se descuenta con un
+      pago fallido. El pedido queda
+      PENDIENTE para reintentar.
+    end note
+  end
+end
+O --> CC : Payment
+deactivate O
+CC -> DB : UPDATE payments + orders + stock_movements
+DB --> CC : ok
+CC --> CH : 200 OK (OrderResponse con estado del pago)
+deactivate CC
+alt pago aceptado
+  CH --> CLI : "Pago exitoso" + notificación "Pedido pagado"
+else pago rechazado
+  CH --> CLI : "Pago rechazado, puedes reintentar"
+end
+deactivate CH
+@enduml
+
+
+================================================================================
+CU20 - ACTUALIZAR INVENTARIO AUTOMATICAMENTE   (Inventario / Sistema)
+================================================================================
+@startuml CU20_ActualizarInventario
+title CU20 - Actualizar inventario automaticamente
+autonumber
+control "_complete_order_sale\n(sistema)" as SYS <<control>>
+entity "Order : o1" as O <<entity>>
+entity "OrderItem : oi1" as OI <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "StockMovement : sm1" as SM <<entity>>
+entity "Notification : n1" as N <<entity>>
+database "Base de datos" as DB <<database>>
+
+note over SYS
+  Se dispara al CONFIRMAR un pago (CU19) o una
+  venta presencial (CU18). No es una accion de
+  usuario: es una reaccion del sistema.
+end note
+
+SYS -> O : _complete_order_sale(orden, usuario)
+activate O
+opt la orden tiene sucursal asociada
+  loop por cada OrderItem de la orden
+    O -> OI : lee variant_id y quantity
+    activate OI
+    OI --> O : order_item
+    deactivate OI
+    O -> INV : _deduct_order_stock -> descuenta available
+    activate INV
+    INV --> O : nuevo available
+    deactivate INV
+    O -> SM : _movement(tipo="VENTA", delta=-cantidad,\nmotivo="Venta #o1")
+    activate SM
+    SM --> O : stock_movement
+    deactivate SM
+    O -> DB : UPDATE inventory SET available=...\n+ INSERT stock_movements
+    DB --> O : ok
+  end
+end
+O -> O : status = "PAGADO"
+O -> N : _notify(cliente, "Pedido pagado", total)
+activate N
+N --> O : notificación
+deactivate N
+O -> DB : INSERT notifications
+DB --> O : ok
+O --> SYS : venta confirmada
+deactivate O
+SYS --> SYS : COMMIT
+@enduml
+
+
+================================================================================
+CU21 - GESTIONAR MOVIMIENTOS DE INVENTARIO   (Inventario / Encargado, Administrador)
+================================================================================
+@startuml CU21_GestionarMovimientos
+title CU21 - Gestionar movimientos de inventario
+autonumber
+actor "Encargado de Sucursal" as ENC <<actor>>
+boundary "InventarioComponent\n(Angular)" as IC <<boundary>>
+control "InventoryController\n/api/inventory" as IC2 <<control>>
+control "Security\nrequire_admin / require_staff" as SEC <<control>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "StockMovement : sm1" as SM <<entity>>
+database "Base de datos" as DB <<database>>
+
+ENC -> IC : abre Inventario de su sucursal
+activate IC
+IC -> IC2 : GET /api/inventory?branch_id={b1}
+activate IC2
+IC2 -> SEC : require_admin / personal autorizado
+activate SEC
+alt rol no autorizado
+  SEC --> IC2 : 403 Forbidden
+  deactivate SEC
+  IC2 --> IC : 403
+  deactivate IC2
+  IC --> ENC : "Acceso restringido"
+else autorizado
+  SEC --> IC2 : user(encargado)
+  deactivate SEC
+  IC2 -> DB : SELECT inventory WHERE branch_id=b1
+  DB --> IC2 : existencias de la sucursal
+  IC2 --> IC : 200 OK (InventoryResponse[])
+  deactivate IC2
+  IC --> ENC : tabla de existencias
+
+  group Consultar movimientos
+    ENC -> IC : pulsa "Movimientos"
+    IC -> IC2 : GET /api/inventory/movements?branch_id={b1}
+    activate IC2
+    IC2 -> DB : SELECT stock_movements ORDER BY fecha DESC
+    DB --> IC2 : lista de movimientos
+    IC2 --> IC : 200 OK (StockMovementResponse[])
+    deactivate IC2
+    IC --> ENC : historial de entradas, salidas, ajustes y reservas
+  end
+
+  group Registrar un movimiento manual
+    ENC -> IC : nueva entrada/ajuste(producto, cantidad, motivo)
+    IC -> IC2 : POST /api/inventory/movements(datos)
+    activate IC2
+    IC2 -> INV : aplica delta al inventario
+    activate INV
+    alt cantidad o variante inexistente
+      INV --> IC2 : error de validación
+      deactivate INV
+      IC2 --> IC : 404 / 400
+      deactivate IC2
+      IC --> ENC : "Movimiento rechazado"
+    else movimiento válido
+      INV --> IC2 : available actualizado
+      deactivate INV
+      create entity "StockMovement : sm1" as SM <<entity>>
+      IC2 -> SM : crea(tipo, delta, motivo, usuario, fecha)
+      activate SM
+      SM --> IC2 : stock_movement
+      deactivate SM
+      IC2 -> DB : UPDATE inventory + INSERT stock_movements
+      DB --> IC2 : ok
+      IC2 --> IC : 201 Created (StockMovementResponse)
+      deactivate IC2
+      IC --> ENC : "Movimiento registrado"
+    end
+  end
+end
+deactivate IC
+@enduml
+
+
+================================================================================
+CU22 - RECOMENDAR PRENDAS (IA)   (IA - Recomendacion / Cliente)
+================================================================================
+@startuml CU22_RecomendarPrendas
+title CU22 - Recomendar prendas (IA)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "RecomendadosComponent\n(Angular / Flutter)" as RC <<boundary>>
+control "AssistantController\nGET /api/recommendations" as AC <<control>>
+control "recommendations\nrecommend(db, user_id, limit)" as REC <<control>>
+entity "User : u1" as U <<entity>>
+entity "Order : o1" as O <<entity>>
+entity "Product : p1" as P <<entity>>
+entity "RecommendationResponse" as RR <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> RC : abre "Recomendados para ti"
+activate RC
+RC -> AC : GET /api/recommendations?limit=8
+activate AC
+AC -> REC : recommend(db, user_id=u1, limit=8)
+activate REC
+REC -> DB : SELECT orders del usuario(historial de compras)
+DB --> REC : categorías y productos comprados
+REC -> DB : SELECT productos candidatos\nmisma categoría / temporada
+DB --> REC : catálogo
+alt el usuario no tiene historial suficiente
+  REC -> REC : _featured(db, limit) recomienda destacados
+else historial suficiente
+  REC -> REC : puntúa por coincidencia de categoría, temporada y tendencia
+end
+create entity "RecommendationResponse" as RR <<entity>>
+REC -> RR : arma(prenda, motivo, puntaje)
+activate RR
+RR --> REC : respuesta
+deactivate RR
+REC --> AC : RecommendationResponse
+deactivate REC
+AC --> RC : 200 OK (RecommendationResponse)
+deactivate AC
+RC --> CLI : tarjetas de prendas recomendadas
+deactivate RC
+destroy RR
+note right of REC
+  RecommendationResponse es un DTO
+  transitorio: se destruye al terminar
+  la interacción (regla R5).
+end note
+@enduml
+
+
+================================================================================
+CU23 - CONSULTAR ASISTENTE VIRTUAL (CHATBOT)   (IA - Recomendacion / Cliente)
+================================================================================
+@startuml CU23_AsistenteVirtual
+title CU23 - Consultar asistente virtual (chatbot)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "ChatComponent\n(Angular / Flutter)" as CH <<boundary>>
+control "AssistantController\nPOST /api/assistant/chat" as AC <<control>>
+control "assistant\ngenerate_answer(db, user, message, history)" as AS <<control>>
+entity "ChatConversation : cv1" as CV <<entity>>
+entity "ChatMessage : cm1" as CM <<entity>>
+entity "Product : p1" as P <<entity>>
+entity "Texto de la respuesta" as TX <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> CH : escribe pregunta("¿Tienen talla M en azul?")
+activate CH
+CH -> AC : POST /api/assistant/chat(message, conversation_id?)
+activate AC
+AC -> AS : generate_answer(db, user, mensaje, historial)
+activate AS
+AS -> DB : SELECT conversation + historial previo
+DB --> AS : historial
+opt el mensaje es sobre un producto concreto
+  AS -> AS : _find_products(mensaje) / _context_subject(historial)
+  activate P
+  P --> AS : producto de contexto
+  deactivate P
+  AS -> AS : _product_detail_reply / _availability_lines
+else el mensaje es de stock o sucursales
+  AS -> AS : _stock_reply / _branches_summary
+else es sobre el último pedido
+  AS -> AS : _latest_order(db, user_id)
+end
+create entity "Texto de la respuesta" as TX <<entity>>
+AS -> TX : redacta(respuesta)
+activate TX
+TX --> AS : texto
+deactivate TX
+AS --> AC : (respuesta, productos sugeridos)
+deactivate AS
+
+alt es la primera interacción
+  create entity "ChatConversation : cv1" as CV <<entity>>
+  AC -> CV : crea conversación(usuario, título)
+  activate CV
+  CV --> AC : conversation
+  deactivate CV
+  AC -> DB : INSERT chat_conversations
+  DB --> AC : ok
+else continuación de la conversación
+  AC -> CV : reutiliza conversation_id
+  activate CV
+  CV --> AC : conversation
+  deactivate CV
+end
+
+AC -> CM : registra mensaje del cliente y respuesta
+activate CM
+CM --> AC : mensajes persistidos
+deactivate CM
+AC -> DB : INSERT chat_messages
+DB --> AC : ok
+AC --> CH : 200 OK (ChatResponse: respuesta + conversación)
+deactivate AC
+CH --> CLI : muestra la respuesta del asistente
+deactivate CH
+destroy TX
+@enduml
+
+
+================================================================================
+CU24 - GENERAR REPORTE POR COMANDO DE VOZ   (IA - Recomendacion / Administrador)
+================================================================================
+@startuml CU24_ReporteVoz
+title CU24 - Generar reporte por comando de voz
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "ReportesComponent\n(Angular - botón de voz)" as RC <<boundary>>
+control "Web Speech API / MediaRecorder\n(entrada de audio)" as VOZ <<control>>
+control "ReportsController\nPOST /api/reports/voice" as PC <<control>>
+control "reports\nconsulta agregada del dashboard" as RP <<control>>
+entity "AudioBuffer : ab1" as AB <<entity>>
+entity "Texto transcrito : t1" as TX <<entity>>
+entity "VoiceReportResponse : vr1" as VR <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> RC : pulsa "Reporte por voz"
+activate RC
+RC -> VOZ : solicita permiso de micrófono
+activate VOZ
+create entity "AudioBuffer : ab1" as AB <<entity>>
+VOZ -> AB : captura audio(micrófono)
+activate AB
+AB --> VOZ : audio capturado
+deactivate AB
+VOZ -> VOZ : transcribe a texto(reconocimiento de voz)
+create entity "Texto transcrito : t1" as TX <<entity>>
+VOZ -> TX : crea(texto reconocido)
+activate TX
+TX --> VOZ : "ventas de este mes"
+deactivate TX
+VOZ --> RC : texto transcrito
+deactivate VOZ
+
+RC -> PC : POST /api/reports/voice(transcripcion)
+activate PC
+PC -> RP : interpreta el comando y ejecuta la consulta
+activate RP
+alt comando no reconocido
+  RP --> PC : error de interpretación
+  deactivate RP
+  PC --> RC : 400 "No se pudo interpretar el comando"
+else comando válido
+  RP -> DB : SELECT agregados (ventas, pedidos, stock, sucursal)
+  activate DB
+  DB --> RP : datos del período
+  deactivate DB
+  RP --> PC : DashboardReport
+  deactivate RP
+  create entity "VoiceReportResponse : vr1" as VR <<entity>>
+  PC -> VR : crea(periodo, métricas, gráficos)
+  activate VR
+  VR --> PC : respuesta
+  deactivate VR
+  PC -> DB : (opcional) registra la consulta realizada
+  PC --> RC : 200 OK (VoiceReportResponse)
+  deactivate PC
+  RC --> ADM : muestra el reporte y lo dicta en voz alta
+  destroy VR
+end
+deactivate RC
+destroy AB
+@enduml
+
+
+================================================================================
+CU25 - CONSULTAR REPORTES Y DASHBOARDS   (Reportes y Dashboards / Administrador)
+================================================================================
+@startuml CU25_ReportesDashboards
+title CU25 - Consultar reportes y dashboards
+autonumber
+actor "Administrador" as ADM <<actor>>
+actor "Encargado de Sucursal" as ENC <<actor>>
+boundary "ReportesComponent\n(Angular)" as RC <<boundary>>
+control "ReportsController\nGET /api/reports/dashboard" as PC <<control>>
+control "Security\nrequiere Administrador o Encargado" as SEC <<control>>
+entity "DashboardReport : dr1" as DR <<entity>>
+entity "Order : o1" as O <<entity>>
+entity "Inventory : inv1" as INV <<entity>>
+entity "Product : p1" as P <<entity>>
+database "Base de datos" as DB <<database>>
+
+ADM -> RC : abre Reportes y Dashboards
+activate RC
+RC -> PC : GET /api/reports/dashboard?desde=&hasta=&branch_id=
+activate PC
+PC -> SEC : valida token y rol
+activate SEC
+alt rol no autorizado (p.ej. Cliente o Cajero)
+  SEC --> PC : 403 "Requiere rol de administrador o encargado de sucursal"
+  deactivate SEC
+  PC --> RC : 403 Forbidden
+  deactivate PC
+  RC --> ADM : "Acceso restringido"
+else rol autorizado
+  SEC --> PC : user(autorizado)
+  deactivate SEC
+  par Reporte de ventas
+    PC -> O : SELECT orders del período
+    activate O
+    O --> PC : pedidos, totales, estado de pago
+    deactivate O
+  else Reporte de inventario
+    PC -> INV : SELECT inventory por sucursal
+    activate INV
+    INV --> PC : existencias y alertas de stock bajo
+    deactivate INV
+  else Reporte de productos
+    PC -> P : SELECT productos más vendidos
+    activate P
+    P --> PC : ranking de productos
+    deactivate P
+  end
+  PC -> DB : consultas agregadas complementarias
+  DB --> PC : métricas del período
+  create entity "DashboardReport : dr1" as DR <<entity>>
+  PC -> DR : arma(ventas, pedidos, ticket_promedio,\nalertas, top_productos)
+  activate DR
+  DR --> PC : dashboard
+  deactivate DR
+  PC --> RC : 200 OK (DashboardReport)
+  deactivate PC
+  RC --> ADM : gráficos, tarjetas de indicadores y alertas
+  deactivate RC
+  destroy DR
+end
+@enduml
+
+
+================================================================================
+CU26 - CONSULTAR HISTORIAL DE COMPRAS   (Reportes / Cliente)
+================================================================================
+@startuml CU26_HistorialCompras
+title CU26 - Consultar historial de compras
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "HistorialComponent\n(Angular / Flutter)" as HC <<boundary>>
+control "CommerceController\nGET /api/orders" as CC <<control>>
+control "Security\nget_current_user" as SEC <<control>>
+entity "Order : o1" as O <<entity>>
+entity "OrderItem : oi1" as OI <<entity>>
+entity "Notification : n1" as N <<entity>>
+database "Base de datos" as DB <<database>>
+
+CLI -> HC : abre "Mis compras"
+activate HC
+HC -> CC : GET /api/orders
+activate CC
+CC -> SEC : get_current_user(token)
+activate SEC
+alt token ausente o invalido
+  SEC --> CC : 401 Unauthorized
+  deactivate SEC
+  CC --> HC : 401
+  deactivate HC
+  HC --> CLI : redirige a /auth
+else token valido
+  SEC --> CC : user(u1)
+  deactivate SEC
+  CC -> DB : SELECT orders WHERE client_id=u1\nORDER BY fecha DESC
+  activate DB
+  DB --> CC : lista de pedidos
+  deactivate DB
+  loop por cada pedido
+    CC -> O : arma OrderResponse(fecha, total, estado)
+    activate O
+    O --> CC : datos del pedido
+    deactivate O
+    CC -> OI : lee OrderItem(prenda, cantidad, precio)
+    activate OI
+    OI --> CC : detalle de prendas
+    deactivate OI
+  end
+  CC --> HC : 200 OK (OrderResponse[])
+  deactivate CC
+  HC --> CLI : lista de compras con estado (PENDIENTE / PAGADO / CANCELADO)
+
+  opt ver detalle de una compra
+    CLI -> HC : selecciona un pedido
+    HC -> CC : GET /api/orders/{order_id}
+    activate CC
+    CC -> DB : SELECT order + items + payment
+    DB --> CC : detalle completo
+    CC --> HC : 200 OK (OrderResponse con pago yTracking)
+    deactivate CC
+    HC --> CLI : detalle con prendas, total y estado del pago
+  end
+
+  opt revisar notificaciones de compra
+    CLI -> HC : abre notificaciones
+    HC -> CC : GET /api/notifications
+    activate CC
+    CC -> N : lee Notification(título, mensaje, leída)
+    activate N
+    N --> CC : notificaciones
+    deactivate N
+    CC --> HC : 200 OK (NotificationResponse[])
+    deactivate CC
+    HC --> CLI : avisos de pago, reserva y entrega
+  end
+end
+deactivate HC
+@enduml
+
+
+================================================================================
+CHECKLIST DE DEFENSA (verifica antes de entregar)
+================================================================================
+[ ] Cada lifeline representa UNA SOLA INSTANCIA; las creadas durante la
+    interacción se dibujan con `create` y llevan su identificador (R3, R4).
+[ ] El tiempo fluye de arriba hacia abajo; ninguna flecha vuelve al pasado (R2).
+[ ] Todo mensaje es SINCRÓNICO (->) y toda respuesta es DISCONTINUA (-->) (R7, R8).
+[ ] Los mensajes llevan nombre y argumentos, como los exige la norma (R7).
+[ ] Hay `activate`/`deactivate` en cada lifeline que ejecuta trabajo (Foco de
+    control, R6).
+[ ] `destroy` solo se usa en objetos que realmente dejan de existir: detector
+    de MediaPipe, DTOs, audio y capturas (R5). Los objetos persistentes
+    (User, Order, Product) no se destruyen.
+[ ] Los mensajes nombran rutas y funciones REALES del código, no inventadas.
+[ ] Los casos de uso CU1-CU26 del PUDS tienen su diagrama y el título coincide
+    con el nombre del PUDS.
+[ ] Cada diagrama es un bloque independiente: se pega de uno en uno en draw.io.

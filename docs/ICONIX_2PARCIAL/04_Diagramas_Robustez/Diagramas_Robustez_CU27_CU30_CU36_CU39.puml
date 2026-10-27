@@ -1,0 +1,212 @@
+# DIAGRAMAS DE ROBUSTEZ (ICONIX)
+
+> En ICONIX se usan objetos **Frontera (<<boundary>>)**, **Control (<<control>>)** y **Entidad (<<entity>>)**
+> 
+> Reglas: Actor -> Frontera -> Control -> Entidad. Los controladores pueden comunicarse entre sí.
+
+## CU36 - Sincronizar Operaciones Pendientes
+
+```plantuml
+@startuml CU36_Robustez
+title CU36 - Diagrama de Robustez: Sincronizar Operaciones Pendientes
+left to right direction
+
+actor "Cajero / Encargado" as Actor
+
+rectangle "Frontera" {
+  boundary "Pantalla Operaciones Pendientes" as B1
+  boundary "Vista Resultado Sincronización" as B2
+}
+
+rectangle "Control" {
+  control "SyncClientController" as C1
+  control "SyncService" as C2
+  control "InventarioValidator" as C3
+  control "IdempotenciaControl" as C4
+  control "TenantGuard" as C5
+}
+
+rectangle "Entidad" {
+  entity "OperacionSync" as E1
+  entity "ConflictoSync" as E2
+  entity "Venta" as E3
+  entity "ItemVenta" as E4
+  entity "Inventario" as E5
+  entity "MovimientoInventario" as E6
+}
+
+Actor --> B1
+B1 --> C1 : solicitar sincronizar
+C1 --> C2 : enviar lista de operaciones
+C2 --> C5 : validar empresa/sucursal/usuario
+C2 --> C4 : verificar por UUID (idempotencia)
+C4 --> E1 : consultar por uuid
+C2 --> C3 : validar stock por sucursal
+C3 --> E5 : consultar inventario
+C3 --> E6 : preparar movimientos
+C2 --> E1 : actualizar estados
+C2 --> E3 : crear venta/reserva
+C2 --> E4 : crear items
+C2 --> E2 : crear conflicto si falta stock
+C2 --> B2 : retornar resultados por UUID
+B2 --> Actor
+
+note right of C4
+  Si UUID existe y CONFIRMADA
+  NO se duplica
+end note
+
+note right of C3
+  Validación EXCLUSIVA en servidor
+  Filtrado por empresa_id
+end note
+@enduml
+```
+
+## CU30 - Verificar Límites y Restricciones por Plan
+
+```plantuml
+@startuml CU30_Robustez
+title CU30 - Diagrama de Robustez: Verificar Límites y Restricciones por Plan
+left to right direction
+
+actor "Sistema" as Actor
+
+rectangle "Frontera" {
+  boundary "Interceptor HTTP" as B1
+  boundary "Respuesta 403/Autorizado" as B2
+}
+
+rectangle "Control" {
+  control "PlanGuard" as C1
+  control "TenantGuard" as C2
+  control "SuscripcionService" as C3
+}
+
+rectangle "Entidad" {
+  entity "Empresa" as E1
+  entity "Plan" as E2
+  entity "Suscripcion" as E3
+  entity "Sucursal" as E4
+}
+
+Actor --> B1
+B1 --> C2 : validar pertenencia al tenant
+C2 --> C1 : delegar validación de plan
+C1 --> C3 : obtener suscripción activa
+C3 --> E1 : buscar empresa
+C3 --> E3 : buscar suscripcion activa
+C3 --> E2 : obtener plan con límites
+C1 --> E4 : contar sucursales activas
+C1 --> B2 : autorizar o denegar (403)
+B2 --> Actor
+
+note right of C1
+  Básico: max_sucursales=2, permite_ia=false
+  Profesional: max_sucursales=10, permite_ia=true
+end note
+@enduml
+```
+
+## CU39 - Generar Reporte con Lenguaje Natural
+
+```plantuml
+@startuml CU39_Robustez
+title CU39 - Diagrama de Robustez: Reporte Generativo con Lenguaje Natural
+left to right direction
+
+actor "Administrador de Empresa / Encargado" as Actor
+
+rectangle "Frontera" {
+  boundary "Pantalla Reportes IA" as B1
+  boundary "Resultado: Tabla / Gráfico" as B2
+  boundary "Exportar PDF/Excel" as B3
+}
+
+rectangle "Control" {
+  control "ReporteIAController" as C1
+  control "PlanGuard" as C2
+  control "TenantGuard" as C3
+  control "ReporteIAService" as C4
+  control "LLMClient" as C5
+  control "QueryBuilderSeguro" as C6
+  control "ExportService" as C7
+}
+
+rectangle "Entidad" {
+  entity "SolicitudReporteIA" as E1
+  entity "Empresa" as E2
+  entity "Venta" as E3
+  entity "ItemVenta" as E4
+  entity "Sucursal" as E5
+  entity "Producto" as E6
+}
+
+Actor --> B1
+B1 --> C1 : enviar pregunta natural
+C1 --> C2 : validar plan Profesional
+C1 --> C3 : validar tenant
+C1 --> C4 : procesar solicitud
+C4 --> E1 : crear registro
+C4 --> C5 : enviar pregunta + catálogo permitido
+C5 --> C4 : retornar JSON de parámetros
+C4 --> C6 : validar parámetros contra catálogo
+C6 --> E3 : consulta parametrizada FILTRADA POR empresa_id
+C6 --> E4
+C6 --> E5
+C6 --> E6
+C6 --> C4 : armar resultado
+C4 --> B2 : mostrar tabla/gráfico
+B2 --> B3 : exportar
+B3 --> C7 : generar PDF/Excel
+C7 --> Actor
+
+note right of C6
+  NUNCA SQL libre
+  SIEMPRE filtrar por empresa_id
+  Consultas parametrizadas
+end note
+@enduml
+```
+
+## CU27 - Registrar Empresa Contratante
+
+```plantuml
+@startuml CU27_Robustez
+title CU27 - Diagrama de Robustez: Registrar Empresa Contratante
+left to right direction
+
+actor "Administrador de Plataforma" as Actor
+
+rectangle "Frontera" {
+  boundary "Formulario Registrar Empresa" as B1
+  boundary "Confirmación" as B2
+}
+
+rectangle "Control" {
+  control "EmpresaController" as C1
+  control "EmpresaService" as C2
+  control "SuscripcionService" as C3
+}
+
+rectangle "Entidad" {
+  entity "Empresa" as E1
+  entity "Usuario" as E2
+  entity "Role" as E3
+  entity "Plan" as E4
+  entity "Suscripcion" as E5
+}
+
+Actor --> B1
+B1 --> C1 : datos empresa + plan + admin
+C1 --> C2 : crear empresa
+C2 --> E1 : validar NIT único y guardar
+C2 --> E3 : obtener rol ADMIN_EMPRESA
+C2 --> E2 : crear usuario administrador
+C2 --> C3 : crear suscripción
+C3 --> E4 : validar plan activo
+C3 --> E5 : guardar suscripción ACTIVA
+C2 --> B2 : mostrar resultado
+B2 --> Actor
+@enduml
+```

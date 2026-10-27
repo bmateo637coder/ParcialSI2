@@ -1,0 +1,2387 @@
+================================================================================
+PUNTO DE ANALISIS - DIAGRAMAS DE CLASES (UML 2.5)
+Fashion Store (Sistemas II) - un diagrama por cada caso de uso
+================================================================================
+Archivo      : diagramas-clases-analisis-ciclos.txt
+Codificacion : UTF-8
+Base normativ: UML2.5.pdf (notacion de clases) y Documento parcial si2.pdf
+               seccion 1.5 "Estructurar el Modelo de Caso de Uso" y
+               seccion 2 "Flujo de Trabajo: Analisis"
+Alcance      : 26 diagramas, uno por cada caso de uso (CU1 - CU26)
+Fuente       : backend/app/models/*.py      (25 tablas reales)
+               backend/app/api/*.py         (funciones de cada caso de uso)
+               backend/app/services/*.py    (pagos, recomendaciones, asistente)
+
+
+--------------------------------------------------------------------------------
+1. QUE MUESTRA CADA DIAGRAMA
+--------------------------------------------------------------------------------
+Este es el punto de ANALISIS del PUDS, no el de diseno. Cada caso de uso tiene
+su propio diagrama, y en cada uno aparecen las tres cosas que pidio el
+enunciado:
+
+  1) EL ACTOR   -> clases <<actor>> arriba, con la asociacion y la multiplicidad
+                    hacia la entidad con la que interactua.
+  2) LOS METODOS -> operaciones (+ / -) de cada clase. Son las operaciones de
+                    dominio del caso de uso, y su nombre corresponde a la
+                    funcion real que lo implementa en backend/app/api/.
+  3) LAS TABLAS  -> cada clase lleva debajo, en una nota, el nombre fisico real
+                    de su tabla, su clave primaria y sus claves foraneas.
+                    Los nombres de tabla NO son inventados: salen de
+                    __tablename__ en el codigo.
+
+Notacion:
+  +  publico          -  privado
+  <<actor>>    persona externa
+  <<entity>>   entidad de dominio persistente (tiene tabla)
+  <<boundary>> interfaz (pantalla Angular/Flutter o servicio externo)
+  <<dto>>      objeto de transferencia, NO se persiste (no tiene tabla)
+  + = atributo    +( ) = metodo
+
+Nota sobre el actor: se dibuja como class "Cliente" as CLI <<actor>> en vez de
+actor "Cliente" as CLI. Los dos significan lo mismo en UML, pero la palabra
+clave "actor" no la acepta el validador de PlantUML 1.2024.7 que se uso para
+revisar estos 26 diagramas en diagramas de clases (si la acepta en diagramas de
+secuencia). El estereotipo <<actor>> se ve igual en draw.io, asi que si
+prefieres la palabra "actor" en el codigo basta cambiar esas lineas.
+
+Las clases sin tabla (VestidorAR, PasarelaPago, RecomendadorIA, AsistenteIA,
+ReporteVoz, DashboardReport) lo declaran explicitamente, para que no se lean
+como un error de modelado.
+
+
+--------------------------------------------------------------------------------
+2. INDICE: UN DIAGRAMA POR CASO DE USO
+--------------------------------------------------------------------------------
+ CICLO 1  Identidad, roles, sucursales y catalogo
+   CU1   Registrarse                                -> CU1_Analisis
+   CU2   Iniciar sesion                             -> CU2_Analisis
+   CU3   Gestionar perfil                           -> CU3_Analisis
+   CU5   Gestionar sucursales                       -> CU5_Analisis
+   CU6   Consultar sucursales por ciudad            -> CU6_Analisis
+   CU7   Gestionar productos                        -> CU7_Analisis
+   CU10  Consultar catalogo y buscar prendas        -> CU10_Analisis
+
+ CICLO 2  Usuarios, proveedores, disponibilidad, reservas, carrito, inventario
+   CU4   Gestionar usuarios y roles                 -> CU4_Analisis
+   CU8   Gestionar temporadas y colecciones         -> CU8_Analisis
+   CU9   Gestionar proveedores                      -> CU9_Analisis
+   CU11  Consultar disponibilidad por sucursal      -> CU11_Analisis
+   CU13  Reservar prendas                           -> CU13_Analisis
+   CU14  Gestionar reserva (consultar / cancelar)    -> CU14_Analisis
+   CU15  Atender reserva en sucursal                -> CU15_Analisis
+   CU16  Gestionar carrito de compras               -> CU16_Analisis
+   CU21  Gestionar movimientos de inventario        -> CU21_Analisis
+
+ CICLO 3  Vestidor AR, compra, pago, inventario automatico e IA
+   CU12  Usar vestidor virtual (AR)                 -> CU12_Analisis
+   CU17  Confirmar compra digital                   -> CU17_Analisis
+   CU18  Registrar venta presencial                 -> CU18_Analisis
+   CU19  Procesar pago electronico                  -> CU19_Analisis
+   CU20  Actualizar inventario automaticamente      -> CU20_Analisis
+   CU22  Recomendar prendas (IA)                    -> CU22_Analisis
+   CU23  Consultar asistente virtual (chatbot)      -> CU23_Analisis
+
+ CICLO 4  Reportes, dashboards e historial
+   CU24  Generar reporte por comando de voz         -> CU24_Analisis
+         (extension opcional, prioridad baja)
+   CU25  Consultar reportes y dashboards            -> CU25_Analisis
+   CU26  Consultar historial de compras             -> CU26_Analisis
+
+Orden de los bloques en el archivo: CU1, CU2, CU3, CU4, CU5, CU6, CU7, CU8,
+CU9, CU10, CU11, CU12, CU13, CU14, CU15, CU16, CU17, CU18, CU19, CU20, CU21,
+CU22, CU23, CU24, CU25, CU26 (numerico, para que el indice del PUDS coincida).
+
+Las 25 tablas del proyecto, para que puedas cotejar cada diagrama con la base:
+
+  branches            cart_items           categories           chat_conversations
+  chat_messages       collections          colors               inventory
+  inventory_movements notifications       order_items          orders
+  payments            product_proposals    product_variants     products
+  promotions          provider_accounts    providers            reservation_items
+  reservations        roles                seasons              sizes
+  users
+
+
+--------------------------------------------------------------------------------
+3. COMO PEGAR EN DRAW.IO
+--------------------------------------------------------------------------------
+  Arrange > Insert > Advanced > PlantUML...  (Insertar > Avanzado > PlantUML)
+  Copia UN bloque completo y pegalo. Un bloque = un caso de uso.
+
+
+================================================================================
+################  CU1 - Registrarse  ################
+================================================================================
+@startuml CU1_Analisis
+title CU1 - Registrarse (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "User" as U <<entity>> {
+  - id : int
+  - first_name : str
+  - last_name : str
+  - email : str
+  - phone : str
+  - hashed_password : str
+  - is_active : bool
+  - role_id : int
+  - created_at : datetime
+  + registrar() : User
+  + full_name() : str
+  + role_name() : str
+}
+
+class "Role" as R <<entity>> {
+  - id : int
+  - name : str
+  + consultar() : List~Role~
+}
+
+CLI "1" --> "0..1" U : se registra
+U "0..*" -- "1" R : recibe rol
+
+note right of U
+  Tabla: users
+  PK: id   UNIQUE: email
+  FK: role_id -> roles.id
+  Implementa: register()
+  El alta siempre con el rol Cliente;
+  la contrasena se guarda hasheada.
+end note
+note right of R
+  Tabla: roles
+  PK: id
+  Los 5 roles se siembran al arrancar
+  (Administrador, Cliente, Cajero,
+  Encargado de Sucursal, Proveedor).
+end note
+@enduml
+
+
+================================================================================
+################  CU2 - Iniciar sesion  ################
+================================================================================
+@startuml CU2_Analisis
+title CU2 - Iniciar sesion (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "User" as U <<entity>> {
+  - id : int
+  - email : str
+  - hashed_password : str
+  - is_active : bool
+  - role_id : int
+  + autenticar() : Token
+  + role_name() : str
+  + full_name() : str
+}
+
+class "Token" as TK <<dto>> {
+  + access_token : str
+  + token_type : str
+}
+
+CLI "1" --> U : envia email y contrasena
+U --> "1" TK : devuelve
+
+note right of U
+  Tabla: users
+  PK: id   UNIQUE: email
+  Implementa: login()
+  busca por email, compara el hash con
+  verify_password() y valida is_active.
+  La contrasena nunca sale del servidor.
+end note
+note right of TK
+  Tabla: NINGUNA.
+  Es la respuesta de la API, no se
+  persiste. Se entrega en el cuerpo y
+  el cliente lo guarda en localStorage.
+end note
+@enduml
+
+
+================================================================================
+################  CU3 - Gestionar perfil  ################
+================================================================================
+@startuml CU3_Analisis
+title CU3 - Gestionar perfil (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "User" as U <<entity>> {
+  - id : int
+  - first_name : str
+  - last_name : str
+  - email : str
+  - phone : str
+  - role_id : int
+  + consultarPerfil() : User
+  + actualizarPerfil() : User
+  + full_name() : str
+  + role_name() : str
+}
+
+CLI "1" --> "1" U : consulta y actualiza
+
+note right of U
+  Tabla: users
+  PK: id   UNIQUE: email
+  Implementa: get_me(), update_me()
+  La actualizacion es parcial (PATCH):
+  solo se tocan los campos enviados.
+  El usuario solo ve y edita su fila.
+end note
+@enduml
+
+
+================================================================================
+################  CU4 - Gestionar usuarios y roles  ################
+================================================================================
+@startuml CU4_Analisis
+title CU4 - Gestionar usuarios y roles (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+
+class "User" as U <<entity>> {
+  - id : int
+  - first_name : str
+  - last_name : str
+  - email : str
+  - phone : str
+  - is_active : bool
+  - role_id : int
+  - created_at : datetime
+  + listar() : List~User~
+  + obtener() : User
+  + crear() : User
+  + actualizar() : User
+  + desactivar() : void
+  + role_name() : str
+}
+
+class "Role" as R <<entity>> {
+  - id : int
+  - name : str
+  - description : str
+  + consultar() : List~Role~
+}
+
+ADM "1" --> "0..*" U : gestiona
+ADM "1" --> "0..*" R : consulta roles
+U "0..*" -- "1" R : tiene
+
+note right of U
+  Tabla: users
+  PK: id   UNIQUE: email
+  FK: role_id -> roles.id
+  Implementa: list_users(), get_user(),
+  create_user(), update_user(),
+  deactivate_user()
+  deactivate_user() es BORRADO LOGICO:
+  pone is_active = false y conserva la
+  fila, para no romper los pedidos.
+end note
+note right of R
+  Tabla: roles
+  PK: id
+  Implementa: list_roles()
+  Solo lectura: los 5 roles se siembran
+  al arrancar y no se editan por API.
+end note
+@enduml
+
+
+================================================================================
+################  CU5 - Gestionar sucursales  ################
+================================================================================
+@startuml CU5_Analisis
+title CU5 - Gestionar sucursales (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  - city : str
+  - address : str
+  - phone : str
+  - latitude : decimal
+  - longitude : decimal
+  - is_active : bool
+  - created_at : datetime
+  + crear() : Branch
+  + actualizar() : Branch
+  + eliminar() : void
+  + consultarActivas() : List~Branch~
+}
+
+ADM "1" --> "0..*" B : crea, edita y elimina
+
+note right of B
+  Tabla: branches
+  PK: id
+  Implementa: create_branch(),
+  update_branch(), delete_branch()
+  delete_branch() tambien es borrado
+  logico: is_active = false, porque el
+  historial de pedidos y reservas la
+  referencia.
+end note
+@enduml
+
+
+================================================================================
+################  CU6 - Consultar sucursales por ciudad  ################
+================================================================================
+@startuml CU6_Analisis
+title CU6 - Consultar sucursales por ciudad (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  - city : str
+  - address : str
+  - phone : str
+  - is_active : bool
+  + consultarPorCiudad(ciudad) : List~Branch~
+  + consultarTodas() : List~Branch~
+}
+
+CLI "1" --> "0..*" B : busca por ciudad
+
+note right of B
+  Tabla: branches
+  PK: id
+  Implementa: get_branches()
+  Filtra is_active = true y, si viene
+  el parametro city, busca por ese
+  texto.
+  IMPORTANTE: city es un atributo de
+  texto. El proyecto NO tiene una tabla
+  cities, por eso no aparece una clase
+  Ciudad aqui.
+end note
+@enduml
+
+
+================================================================================
+################  CU7 - Gestionar productos  ################
+================================================================================
+@startuml CU7_Analisis
+title CU7 - Gestionar productos (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - description : text
+  - base_price : float
+  - image_url : str
+  - category_id : int
+  - is_active : bool
+  - created_at : datetime
+  + crear() : Product
+  + actualizar() : Product
+  + eliminar() : void
+  + consultar() : List~Product~
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - size_id : int
+  - color_id : int
+  - sku : str
+  - price : float
+  - stock : int
+  - is_active : bool
+  + crear() : ProductVariant
+  + actualizar() : ProductVariant
+  + eliminar() : void
+  + effective_price() : float
+}
+
+class "Category" as C <<entity>> {
+  - id : int
+  - name : str
+  + crear() : Category
+}
+
+class "Size" as SZ <<entity>> {
+  - id : int
+  - name : str
+  + crear() : Size
+}
+
+class "Color" as CL <<entity>> {
+  - id : int
+  - name : str
+  + crear() : Color
+}
+
+ADM "1" --> "0..*" P : gestiona
+ADM "1" --> "0..*" PV : gestiona variantes
+ADM "1" --> "0..*" C : crea
+ADM "1" --> "0..*" SZ : crea
+ADM "1" --> "0..*" CL : crea
+P "*" -- "1" C : clasifica en
+P "1" -- "1..*" PV : ofrece
+PV "*" -- "1" SZ : tiene talla
+PV "*" -- "1" CL : tiene color
+
+note right of P
+  Tabla: products
+  PK: id
+  FK: category_id, season_id,
+      collection_id, provider_id
+  Implementa: create_product(),
+  update_product(), delete_product()
+  Las temporadas y colecciones se
+  administran en el CU8, y los
+  proveedores en el CU9.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id   UNIQUE: sku
+  FK: product_id, size_id, color_id
+  Implementa: create_variant(),
+  update_variant(), delete_variant()
+  effective_price() devuelve price si
+  existe, y si no el base_price del
+  producto. El stock real por sucursal
+  vive en inventory (ver CU11).
+end note
+note right of C
+  Tabla: categories
+  PK: id
+end note
+note right of SZ
+  Tabla: sizes
+  PK: id   UNIQUE: name
+end note
+note right of CL
+  Tabla: colors
+  PK: id   UNIQUE: name
+end note
+@enduml
+
+
+================================================================================
+################  CU8 - Gestionar temporadas y colecciones  ################
+================================================================================
+@startuml CU8_Analisis
+title CU8 - Gestionar temporadas y colecciones (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+
+class "Season" as S <<entity>> {
+  - id : int
+  - name : str
+  - year : int
+  - description : str
+  - start_date : date
+  - end_date : date
+  - is_active : bool
+  + crear() : Season
+  + actualizar() : Season
+  + eliminar() : void
+  + consultar() : List~Season~
+}
+
+class "Collection" as CO <<entity>> {
+  - id : int
+  - name : str
+  - season_id : int
+  - is_active : bool
+  + crear() : Collection
+  + actualizar() : Collection
+  + eliminar() : void
+  + consultar() : List~Collection~
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - season_id : int
+  - collection_id : int
+  + consultar() : List~Product~
+}
+
+ADM "1" --> "0..*" S : gestiona
+ADM "1" --> "0..*" CO : gestiona
+S "1" -- "0..*" CO : agrupa
+CO "0..1" -- "0..*" P : clasifica
+
+note right of S
+  Tabla: seasons
+  PK: id
+  Implementa: create_season(),
+  update_season(), delete_season(),
+  get_seasons()
+  Las fechas start_date y end_date
+  acotan la vigencia de la temporada.
+end note
+note right of CO
+  Tabla: collections
+  PK: id
+  FK: season_id -> seasons.id
+  Implementa: create_collection(),
+  update_collection(), delete_collection()
+  Una coleccion pertenece a una
+  temporada y agrupa varios productos.
+end note
+note right of P
+  Tabla: products
+  PK: id
+  FK: season_id, collection_id
+  Se muestra resumida: aqui solo
+  importa la pertenencia a la temporada
+  y a la coleccion. El resto esta en el CU7.
+end note
+@enduml
+
+
+================================================================================
+################  CU9 - Gestionar proveedores  ################
+================================================================================
+@startuml CU9_Analisis
+title CU9 - Gestionar proveedores (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Proveedor" as PRV <<actor>>
+class "Administrador" as ADM <<actor>>
+
+class "Provider" as PR <<entity>> {
+  - id : int
+  - name : str
+  - contact_email : str
+  - nit : str
+  - phone : str
+  - is_active : bool
+  + crear() : Provider
+  + actualizar() : Provider
+  + eliminar() : void
+  + consultarPerfil() : Provider
+  + publicarPropuesta() : ProductProposal
+}
+
+class "ProviderAccount" as PA <<entity>> {
+  - user_id : int
+  - provider_id : int
+  - created_at : datetime
+  + vincular() : ProviderAccount
+}
+
+class "ProductProposal" as PP <<entity>> {
+  - id : int
+  - provider_id : int
+  - name : str
+  - description : text
+  - base_price : float
+  - status : str
+  - admin_comment : text
+  - created_at : datetime
+  + publicar() : ProductProposal
+  + listar() : List~ProductProposal~
+  + aprobar() : Product
+  + rechazar() : void
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - provider_id : int
+  + crearDesdePropuesta() : Product
+}
+
+PRV "1" --> "0..1" PA : accede al portal
+PRV "1" --> "0..*" PP : propone prendas
+ADM "1" --> "0..*" PP : aprueba o rechaza
+ADM "1" --> "0..*" PR : gestiona
+PR "1" -- "0..1" PA : es la empresa
+PR "1" -- "0..*" PP : recibe propuestas
+PP "0..1" ..> "0..1" P : al aprobar, crea
+
+note right of PR
+  Tabla: providers
+  PK: id   UNIQUE: nit
+  Implementa: create_provider(),
+  update_provider(), delete_provider()
+end note
+note right of PA
+  Tabla: provider_accounts
+  PK: user_id
+  FK: user_id -> users.id
+  FK: provider_id -> providers.id
+  Implementa: link_account()
+  Un usuario con rol Proveedor gestiona
+  los productos de UNA sola empresa.
+end note
+note right of PP
+  Tabla: product_proposals
+  PK: id
+  FK: provider_id -> providers.id
+  Implementa: propose_product(),
+  list_proposals(), approve_proposal(),
+  reject_proposal()
+  Estados: PENDIENTE, APROBADA,
+  RECHAZADA. Solo al aprobar se crea
+  el Product definitivo.
+end note
+note right of P
+  Tabla: products
+  PK: id   FK: provider_id
+  Nace de una propuesta aprobada.
+  Sus variantes se crean despues
+  (ver CU7).
+end note
+@enduml
+
+
+================================================================================
+################  CU10 - Consultar catalogo y buscar prendas  ################
+================================================================================
+@startuml CU10_Analisis
+title CU10 - Consultar catalogo y buscar prendas (CICLO 1)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - description : text
+  - base_price : float
+  - image_url : str
+  - is_active : bool
+  + consultarCatalogo() : List~Product~
+  + buscar(texto) : List~Product~
+  + consultarDetalle() : Product
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  - price : float
+  - is_active : bool
+  + effective_price() : float
+  + consultar() : List~ProductVariant~
+}
+
+class "Category" as C <<entity>> {
+  - id : int
+  - name : str
+  + consultar() : List~Category~
+}
+
+class "Season" as S <<entity>> {
+  - id : int
+  - name : str
+  - year : int
+  + consultar() : List~Season~
+}
+
+class "Collection" as CO <<entity>> {
+  - id : int
+  - name : str
+  + consultar() : List~Collection~
+}
+
+CLI "1" --> "0..*" P : navega y busca
+P "*" -- "1" C : clasifica en
+P "1" -- "1..*" PV : ofrece
+P "0..1" -- "0..1" S : pertenece a
+P "0..1" -- "0..1" CO : pertenece a
+
+note right of P
+  Tabla: products
+  PK: id
+  Implementa: get_products(), get_product()
+  Solo lectura. Filtra is_active = true
+  y acepta categoria, temporada,
+  coleccion y texto libre.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id   UNIQUE: sku
+  Implementa: get_variants()
+  El precio que ve el cliente es
+  effective_price(). La cantidad
+  disponible NO sale de aqui, sale de
+  inventory (ver CU11).
+end note
+note bottom of P
+  Tablas de apoyo, todas de solo
+  lectura con su getter en products.py:
+  categories (PK id) -> get_categories()
+  seasons (PK id) -> get_seasons()
+  collections (PK id, FK season_id)
+    -> get_collections()
+end note
+@enduml
+
+================================================================================
+################  CU11 - Consultar disponibilidad por sucursal  ################
+================================================================================
+@startuml CU11_Analisis
+title CU11 - Consultar disponibilidad por sucursal (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + consultarDisponibilidad() : List~Inventory~
+  + consultarPorSucursal(branch_id) : List~Inventory~
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  - price : float
+  + effective_price() : float
+}
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  - city : str
+  - is_active : bool
+  + consultarActivas() : List~Branch~
+}
+
+CLI "1" --> "0..*" INV : consulta stock
+CLI "1" --> "0..*" B : elige sucursal
+INV "*" -- "1" PV : existencia de
+INV "*" -- "1" B : se almacena en
+
+note right of INV
+  Tabla: inventory
+  PK: id   UNIQUE: (variant_id, branch_id)
+  FK: variant_id, branch_id
+  Implementa: get_availability()
+  IMPORTANTE: esta tabla es la fuente
+  de verdad del stock real. El campo
+  stock de product_variants queda como
+  referencia y no se usa para decidir
+  si hay prendas.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id   UNIQUE: sku
+  Se muestra resumida: solo aporta la
+  identidad y el precio de la prenda.
+end note
+note right of B
+  Tabla: branches
+  PK: id
+  Implementa: get_branches()
+end note
+@enduml
+
+
+================================================================================
+################  CU12 - Usar vestidor virtual (AR)  ################
+================================================================================
+@startuml CU12_Analisis
+title CU12 - Usar vestidor virtual AR (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "VestidorAR" as VR <<boundary>> {
+  + garmentPath : str
+  + shoulderSpan : int
+  + neckY : int
+  + pedirPermisoCamara() : MediaStream
+  + onResults() : void
+  + calcularAjuste() : float
+  + capturar() : str
+  + limpiar() : void
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - image_url : str
+  - is_active : bool
+  + consultar() : List~Product~
+  + consultarDetalle() : Product
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  + effective_price() : float
+}
+
+CLI "1" --> VR : elige prenda y se la prueba
+VR ..> P : carga la imagen de la prenda
+VR ..> PV : elige talla y color
+P "1" -- "1..*" PV : ofrece
+
+note right of VR
+  Tabla: NINGUNA.
+  El vestidor es 100% cliente, por eso
+  no aporta ninguna tabla al modelo.
+  Hay dos clientes que lo implementan:
+  - Web: Angular + MediaPipe Pose.
+  - Movil: Flutter/Dart con el plugin
+    camera (fitting_room_screen.dart).
+  Ambos piden permiso de camara, detectan
+  los puntos de la silueta (hombros y
+  cuello), calculan el ajuste de escala y
+  dibujan la prenda encima. Se puede
+  capturar la foto, pero en este proyecto
+  no se guarda en el servidor.
+end note
+note right of P
+  Tabla: products
+  PK: id
+  Solo lectura: el AR consume el
+  catalogo, no lo modifica.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+  garmentPath se arma con la imagen del
+  producto mas la talla y el color.
+end note
+@enduml
+
+
+================================================================================
+################  CU13 - Reservar prendas  ################
+================================================================================
+@startuml CU13_Analisis
+title CU13 - Reservar prendas (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Reservation" as RES <<entity>> {
+  - id : int
+  - code : str
+  - client_id : int
+  - branch_id : int
+  - status : str
+  - reservation_date : datetime
+  - expiration_date : datetime
+  + crear() : Reservation
+  + total() : float
+  + item_count() : int
+  + estaVigente() : bool
+}
+
+class "ReservationItem" as RI <<entity>> {
+  - id : int
+  - reservation_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  + subtotal() : float
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  + effective_price() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + reservar() : void
+  + liberar() : void
+}
+
+class "InventoryMovement" as IM <<entity>> {
+  - id : int
+  - inventory_id : int
+  - movement_type : str
+  - quantity : int
+  - reason : str
+  - user_id : int
+  - created_at : datetime
+  + registrar() : InventoryMovement
+}
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  - is_active : bool
+  + consultarActivas() : List~Branch~
+}
+
+CLI "1" --> "0..*" RES : solicita
+RES "1" -- "1..*" RI : contiene
+RI "*" -- "1" PV : prenda reservada
+RES "*" -- "1" B : se reserva en
+RES ..> INV : descuenta el stock
+INV "*" -- "1" PV : existencia de
+INV "1" -- "0..*" IM : deja rastro
+
+note right of RES
+  Tabla: reservations
+  PK: id   UNIQUE: code
+  FK: client_id -> users.id
+  FK: branch_id -> branches.id
+  Implementa: create_reservation()
+  El code se arma como
+  RSV-AAAAMMDD-XXXXXX.
+  Estados: PENDIENTE, ATENDIDA,
+  CANCELADA, VENCIDA.
+end note
+note right of RI
+  Tabla: reservation_items
+  PK: id
+  FK: reservation_id, variant_id
+  El precio se congela al reservar con
+  effective_price() del momento.
+end note
+note right of INV
+  Tabla: inventory
+  PK: id
+  Al reservar, available baja en la
+  cantidad pedida. Si no alcanza,
+  la API responde 409 y no se crea
+  nada.
+end note
+note right of IM
+  Tabla: inventory_movements
+  PK: id
+  Cada reserva escribe un movimiento
+  de tipo RESERVA con cantidad negativa.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+end note
+note right of B
+  Tabla: branches
+  PK: id
+  Solo se puede reservar en una
+  sucursal con is_active = true.
+end note
+@enduml
+
+
+================================================================================
+################  CU14 - Gestionar reserva (consultar / cancelar)  ################
+================================================================================
+@startuml CU14_Analisis
+title CU14 - Consultar y cancelar reserva (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+class "Encargado de Sucursal" as ENC <<actor>>
+
+class "Reservation" as RES <<entity>> {
+  - id : int
+  - code : str
+  - client_id : int
+  - branch_id : int
+  - status : str
+  - expiration_date : datetime
+  + listar() : List~Reservation~
+  + consultar() : Reservation
+  + cancelar() : void
+  + expirar() : void
+  + total() : float
+  + estaVigente() : bool
+}
+
+class "ReservationItem" as RI <<entity>> {
+  - id : int
+  - reservation_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  + subtotal() : float
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  + effective_price() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + liberar() : void
+}
+
+class "InventoryMovement" as IM <<entity>> {
+  - id : int
+  - inventory_id : int
+  - movement_type : str
+  - quantity : int
+  - reason : str
+  + registrar() : InventoryMovement
+}
+
+CLI "1" --> "0..*" RES : consulta y cancela
+ENC "1" --> "0..*" RES : expira vencidas
+RES "1" -- "1..*" RI : contiene
+RI "*" -- "1" PV : prenda reservada
+RES ..> INV : devuelve el stock
+INV "1" -- "0..*" IM : deja rastro
+
+note right of RES
+  Tabla: reservations
+  PK: id   UNIQUE: code
+  Implementa: list_reservations(),
+  get_reservation(), cancel_reservation(),
+  expire_stale_reservations()
+  Solo se cancela una reserva
+  PENDIENTE y vigente; si ya vencio,
+  pasa a VENCIDA y no se puede tocar.
+  El cliente solo ve sus reservas.
+end note
+note right of RI
+  Tabla: reservation_items
+  PK: id
+end note
+note right of INV
+  Tabla: inventory
+  PK: id
+  Al cancelar o expirar, available
+  vuelve a subir.
+end note
+note right of IM
+  Tabla: inventory_movements
+  PK: id
+  La devolucion queda registrada como
+  movimiento de tipo DEVOLUCION.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+end note
+@enduml
+
+================================================================================
+################  CU15 - Atender reserva en sucursal  ################
+================================================================================
+@startuml CU15_Analisis
+title CU15 - Atender reserva en sucursal (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Encargado de Sucursal" as ENC <<actor>>
+class "Cajero" as CAJ <<actor>>
+
+class "Reservation" as RES <<entity>> {
+  - id : int
+  - code : str
+  - branch_id : int
+  - status : str
+  - expiration_date : datetime
+  - attend_date : datetime
+  + atender() : Reservation
+  + estaVigente() : bool
+  + item_count() : int
+}
+
+class "ReservationItem" as RI <<entity>> {
+  - id : int
+  - reservation_id : int
+  - variant_id : int
+  - quantity : int
+  + subtotal() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + consultar() : Inventory
+}
+
+class "Notification" as N <<entity>> {
+  - id : int
+  - user_id : int
+  - title : str
+  - message : text
+  - is_read : bool
+  - created_at : datetime
+  + enviar() : Notification
+  + marcarLeida() : void
+}
+
+ENC "1" --> RES : atiende el retiro
+CAJ "1" --> RES : atiende el retiro
+RES "1" -- "1..*" RI : contiene
+RI "*" -- "1" INV : prenda entregada
+RES ..> N : avisa al cliente
+
+note right of RES
+  Tabla: reservations
+  PK: id   UNIQUE: code
+  FK: branch_id -> branches.id
+  Implementa: attend_reservation()
+  Reglas: la reserva debe estar PENDIENTE
+  y vigente. Si ya vencio, se marca
+  VENCIDA y responde 400. Al atender,
+  status pasa a ATENDIDA y se guarda
+  attend_date.
+end note
+note right of RI
+  Tabla: reservation_items
+  PK: id
+  Solo lectura: el stock ya estaba
+  descontado al crear la reserva (CU13).
+  Atender NO vuelve a descontar.
+end note
+note right of INV
+  Tabla: inventory
+  PK: id
+  Solo lectura en este caso de uso:
+  el stock ya estaba bloqueado desde la
+  reserva, por eso aqui no se toca.
+end note
+note right of N
+  Tabla: notifications
+  PK: id
+  FK: user_id -> users.id
+  Implementa: _notify()
+  Se avisa al cliente de que recogio su
+  reserva. El personal tambien necesita
+  el rol Cajero o Encargado para atender.
+end note
+@enduml
+
+
+================================================================================
+################  CU16 - Gestionar carrito de compras  ################
+================================================================================
+@startuml CU16_Analisis
+title CU16 - Gestionar carrito de compras (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "CartItem" as CI <<entity>> {
+  - id : int
+  - client_id : int
+  - variant_id : int
+  - quantity : int
+  - added_at : datetime
+  + agregar() : CartItem
+  + editarCantidad() : CartItem
+  + quitar() : void
+  + vaciar() : void
+  + subtotal() : float
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  - price : float
+  - is_active : bool
+  + effective_price() : float
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - base_price : float
+  + consultar() : Product
+}
+
+CLI "1" --> "0..*" CI : administra
+CI "*" -- "1" PV : prenda en el carrito
+PV "*" -- "1" P : variante de
+
+note right of CI
+  Tabla: cart_items
+  PK: id
+  UNIQUE: (client_id, variant_id)
+  FK: client_id -> users.id
+  FK: variant_id -> product_variants.id
+  ON DELETE: CASCADE en ambos
+  Implementa: get_cart(), add_to_cart(),
+  update_cart_item(), remove_cart_item(),
+  clear_cart()
+  Una variante no puede repetirse: si se
+  agrega otra vez, sube la cantidad.
+  El carrito NO reserva stock: es solo
+  una lista de seleccion. El stock se
+  VALIDA al confirmar la compra (CU17)
+  y se DESCUENTA recien cuando el pago
+  queda aprobado (CU19 / CU20).
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id   UNIQUE: sku
+  El precio mostrado sale de
+  effective_price().
+end note
+note right of P
+  Tabla: products
+  PK: id
+  Se muestra resumida: solo aporta el
+  nombre para el carrito.
+end note
+@enduml
+
+
+================================================================================
+################  CU17 - Confirmar compra digital  ################
+================================================================================
+@startuml CU17_Analisis
+title CU17 - Confirmar compra digital (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Order" as O <<entity>> {
+  - id : int
+  - client_id : int
+  - branch_id : int
+  - order_type : str
+  - status : str
+  - total : float
+  - shipping_address : str
+  - created_at : datetime
+  + checkout() : Order
+  + cambiarEstado() : void
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  - discount : float
+  - promotion_id : int
+  + subtotal() : float
+}
+
+class "CartItem" as CI <<entity>> {
+  - id : int
+  - client_id : int
+  - variant_id : int
+  - quantity : int
+  + vaciar() : void
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  + effective_price() : float
+}
+
+class "Promotion" as PRM <<entity>> {
+  - id : int
+  - name : str
+  - discount_type : str
+  - value : float
+  - target_type : str
+  - target_id : int
+  - start_date : date
+  - end_date : date
+  - is_active : bool
+  + vigente() : bool
+  + descuentoPara() : float
+}
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  + consultar() : Branch
+}
+
+CLI "1" --> "1" O : confirma la compra
+O ..> CI : convierte el carrito
+CI "*" -- "1" PV : prenda comprada
+O "1" -- "1..*" OI : contiene
+OI "*" -- "1" PV : prenda vendida
+O "1" -- "0..1" B : se entrega en
+OI "0..*" -- "0..1" PRM : recibe descuento
+
+note right of O
+  Tabla: orders
+  PK: id
+  FK: client_id -> users.id
+  FK: branch_id -> branches.id
+  Implementa: checkout()
+  Convierte el carrito en un pedido de
+  tipo DIGITAL en estado PENDIENTE,
+  valida que haya stock en la sucursal,
+  aplica la promocion vigente, calcula
+  el total y vacia el carrito.
+  Ojo: checkout() intenta el COBRO en el
+  acto, no solo crea el pedido. Si el
+  pago digital es RECHAZADO, el pedido
+  pasa a CANCELADO y se notifica al
+  cliente; si se aprueba, queda PAGADO
+  y se descuenta el stock (CU19/CU20).
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  FK: order_id, variant_id
+  El discount guarda lo aplicado. El
+  promotion_id guarda el id de la
+  promocion, pero el modelo NO declara
+  ForeignKey para ese campo.
+end note
+note right of CI
+  Tabla: cart_items
+  PK: id
+  Se vacia al cerrar el pedido; las
+  filas se borran de verdad.
+end note
+note right of PRM
+  Tabla: promotions
+  PK: id
+  Implementa: promotion_discount_for_variant()
+  Solo se aplican las que estan is_active
+  y dentro de start_date / end_date.
+  target_type: GLOBAL, CATEGORY, PRODUCT.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+end note
+note right of B
+  Tabla: branches
+  PK: id
+  El cliente elige la sucursal donde
+  retira; el stock se descuenta de ahi.
+end note
+@enduml
+
+================================================================================
+################  CU18 - Registrar venta presencial  ################
+================================================================================
+@startuml CU18_Analisis
+title CU18 - Registrar venta presencial (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cajero" as CAJ <<actor>>
+class "Encargado de Sucursal" as ENC <<actor>>
+
+class "Order" as O <<entity>> {
+  - id : int
+  - client_id : int
+  - branch_id : int
+  - order_type : str
+  - status : str
+  - total : float
+  - created_at : datetime
+  + registrarVenta() : Order
+  + cambiarEstado() : void
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  - discount : float
+  + subtotal() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + descontar() : void
+}
+
+class "InventoryMovement" as IM <<entity>> {
+  - id : int
+  - inventory_id : int
+  - movement_type : str
+  - quantity : int
+  - reason : str
+  + registrar() : InventoryMovement
+}
+
+class "User" as U <<entity>> {
+  - id : int
+  - email : str
+  - role_id : int
+  + role_name() : str
+  + obtenerOCrearMostrador() : User
+}
+
+CAJ "1" --> "0..*" O : registra
+ENC "1" --> "0..*" O : registra
+O "1" -- "1..*" OI : contiene
+O "1" -- "1" U : la registra
+O ..> INV : descuenta el stock
+INV "1" -- "0..*" IM : deja rastro
+
+note right of O
+  Tabla: orders
+  PK: id
+  FK: branch_id -> branches.id
+  FK: client_id -> users.id
+  Implementa: pos_sale()
+  Crea un pedido de tipo PRESENCIAL con
+  order_type = PRESENCIAL, descuenta el
+  stock de esa sucursal y exige el rol
+  Cajero, Encargado o Administrador.
+  El cliente NUNCA queda null: si la
+  venta no trae client_id se usa o se
+  crea el usuario Mostrador, y por eso
+  la multiplicidad es 1, no 0..1.
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  Se captura el precio en el momento de
+  la venta, con effective_price().
+end note
+note right of INV
+  Tabla: inventory
+  PK: id
+  Descuenta en el acto. Si no alcanza,
+  responde 409 y no se registra nada.
+end note
+note right of U
+  Tabla: users
+  PK: id
+  Implementa: _get_or_create_mostrador()
+  Si el cliente no esta identificado se
+  usa (o se crea) el usuario Mostrador
+  para poder dejar la venta registrada.
+end note
+note bottom of O
+  Tablas de apoyo:
+  inventory_movements (PK id)
+    -> la venta deja un movimiento
+       SALIDA con el motivo del pedido.
+  branches (PK id)
+    -> la sucursal es obligatoria
+       en la venta presencial.
+  product_variants (PK id)
+    -> de aqui sale el precio y el
+       SKU de cada prenda vendida.
+end note
+@enduml
+
+
+================================================================================
+################  CU19 - Procesar pago electronico  ################
+================================================================================
+@startuml CU19_Analisis
+title CU19 - Procesar pago electronico (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Order" as O <<entity>> {
+  - id : int
+  - client_id : int
+  - total : float
+  - status : str
+  + pagar() : Order
+  + cambiarEstado() : void
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - quantity : int
+  + subtotal() : float
+}
+
+class "Payment" as PAY <<entity>> {
+  - id : int
+  - order_id : int
+  - amount : float
+  - method : str
+  - status : str
+  - stripe_payment_id : str
+  - created_at : datetime
+  - paid_at : datetime
+  + procesar() : Payment
+  + reintentar() : Payment
+}
+
+class "PasarelaPago" as PG <<boundary>> {
+  + charge(monto, metodo, metadata) : GatewayResult
+}
+
+CLI "1" --> "1" O : paga su pedido
+O "1" -- "1..*" OI :contains
+O "1" -- "0..1" PAY :se paga con
+PAY --> PG :delega el cobro
+
+note right of O
+  Tabla: orders
+  PK: id
+  Implementa: pay_order()
+  Solo se paga un pedido PENDIENTE.
+  Si el pago va bien, el pedido pasa a
+  PAGADO y se descuenta el stock
+  (ver CU20). Si falla, el pedido
+  sigue PENDIENTE para reintentar.
+  Excepcion: en una compra DIGITAL el
+  pago rechazado cancela el pedido en
+  el momento (ver la nota de CU17).
+end note
+note right of PAY
+  Tabla: payments
+  PK: id   UNIQUE: order_id
+  FK: order_id -> orders.id
+  Metodos: TARJETA, EFECTIVO,
+  TRANSFERENCIA.
+  Estados: PENDIENTE, COMPLETADO,
+  FALLIDO.
+  El UNIQUE garantiza un solo pago por
+  pedido.
+end note
+note right of PG
+  Tabla: NINGUNA.
+  Es la pasarela de pago. Se resuelve
+  con get_gateway(), que hoy devuelve
+  SandboxPaymentGateway porque el
+  proyecto no tiene un cobro real.
+  La clave nunca se guarda en el
+  servidor: solo el stripe_payment_id.
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  Se consulta para validar que el total
+  del pedido coincide con los items.
+end note
+@enduml
+
+
+================================================================================
+################  CU20 - Actualizar inventario automaticamente  ################
+================================================================================
+@startuml CU20_Analisis
+title CU20 - Actualizar inventario automaticamente (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Sistema" as SIS <<actor>>
+class "Encargado de Sucursal" as ENC <<actor>>
+
+class "Order" as O <<entity>> {
+  - id : int
+  - status : str
+  - total : float
+  + completarVenta() : void
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  + subtotal() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + descontar() : void
+  + aplicarMovimiento() : void
+}
+
+class "InventoryMovement" as IM <<entity>> {
+  - id : int
+  - inventory_id : int
+  - movement_type : str
+  - quantity : int
+  - reason : str
+  - user_id : int
+  - created_at : datetime
+  + registrar() : InventoryMovement
+}
+
+class "Notification" as N <<entity>> {
+  - id : int
+  - user_id : int
+  - title : str
+  - message : text
+  - is_read : bool
+  - created_at : datetime
+  + enviar() : Notification
+}
+
+SIS "1" --> INV : descuenta solo
+ENC "0..1" --> N : recibe aviso
+O "1" -- "1..*" OI : contiene
+OI "*" -- "1" INV : prenda vendida
+INV "1" -- "0..*" IM : deja rastro
+INV ..> N : avisa si se agota
+
+note right of INV
+  Tabla: inventory
+  PK: id
+  Implementa: _deduct_order_stock()
+  y apply_movement()
+  El descuento SOLO ocurre cuando el
+  pago se completa. Si el pago falla,
+  el inventario no se toca: por eso un
+  pago rechazado nunca deja stock
+  negativo.
+end note
+note right of IM
+  Tabla: inventory_movements
+  PK: id
+  Cada venta deja un movimiento de
+  tipo SALIDA con cantidad negativa y
+  el motivo "Venta del pedido #N".
+  Es la bitacora que despues consulta
+  el CU21.
+end note
+note right of N
+  Tabla: notifications
+  PK: id
+  FK: user_id -> users.id
+  Implementa: _alert_out_of_stock()
+  Cuando available llega a 0, avisa a
+  los Administradores y Encargados
+  para que repongan stock.
+end note
+note right of O
+  Tabla: orders
+  PK: id
+  Implementa: _complete_order_sale()
+  Marca el pedido como PAGADO despues
+  de descontar el stock.
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  Se recorre item por item para
+  descontar la cantidad exacta.
+end note
+@enduml
+
+
+================================================================================
+################  CU21 - Gestionar movimientos de inventario  ################
+================================================================================
+@startuml CU21_Analisis
+title CU21 - Gestionar movimientos de inventario (CICLO 2)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Encargado de Sucursal" as ENC <<actor>>
+class "Administrador" as ADM <<actor>>
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + listar() : List~Inventory~
+  + crear() : Inventory
+  + actualizar() : Inventory
+  + registrarMovimiento() : InventoryMovement
+  + aplicarMovimiento() : void
+}
+
+class "InventoryMovement" as IM <<entity>> {
+  - id : int
+  - inventory_id : int
+  - movement_type : str
+  - quantity : int
+  - reason : str
+  - user_id : int
+  - created_at : datetime
+  + registrar() : InventoryMovement
+  + listar() : List~InventoryMovement~
+  + consultarHistorial() : List~InventoryMovement~
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - sku : str
+  + effective_price() : float
+}
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  + consultarActivas() : List~Branch~
+}
+
+class "User" as U <<entity>> {
+  - id : int
+  - role_id : int
+  + role_name() : str
+}
+
+ENC "1" --> "0..*" IM : registra y consulta
+ADM "1" --> "0..*" IM : registra y consulta
+ENC "1" --> "0..*" INV : administra
+INV "1" -- "0..*" IM : tiene movimientos
+INV "*" -- "1" PV : existencia de
+INV "*" -- "1" B : se almacena en
+IM "*" -- "0..1" U : realizada por
+
+note right of IM
+  Tabla: inventory_movements
+  PK: id
+  FK: inventory_id -> inventory.id
+  FK: user_id -> users.id
+  Implementa: list_movements(),
+  create_movement()
+  Tipos: INGRESO, SALIDA, AJUSTE,
+  RESERVA, DEVOLUCION.
+  La cantidad es negativa cuando sale
+  stock y positiva cuando entra.
+  Es la bitacora de auditoría: no se
+  borra, solo se agrega.
+end note
+note right of INV
+  Tabla: inventory
+  PK: id
+  UNIQUE: (variant_id, branch_id)
+  Implementa: list_inventory(),
+  create_inventory(), update_inventory()
+  apply_movement() es la función
+  compartida: actualiza available y
+  escribe el movimiento en la misma
+  transacción, y bloquea la fila para
+  que dos ventas no se pisen.
+end note
+note right of U
+  Tabla: users
+  PK: id
+  Deja rastro de QUIEN hizo el
+  movimiento.
+end note
+note bottom of IM
+  Tablas de apoyo:
+  product_variants (PK id) -> la prenda
+  cuya existencia se esta moviendo.
+  branches (PK id) -> el Encargado solo ve
+  los movimientos de su propia sucursal.
+end note
+@enduml
+
+================================================================================
+################  CU22 - Recomendar prendas (IA)  ################
+================================================================================
+@startuml CU22_Analisis
+title CU22 - Recomendar prendas con IA (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "RecomendadorIA" as RIA <<boundary>> {
+  + recommend(user_id, limite) : List~Product~
+  + destacados(limite) : List~Product~
+  + consultarHistorialDeCompras() : List~Order~
+}
+
+class "User" as U <<entity>> {
+  - id : int
+  - role_id : int
+  + role_name() : str
+}
+
+class "Order" as O <<entity>> {
+  - id : int
+  - client_id : int
+  - order_type : str
+  - status : str
+  - created_at : datetime
+  + consultarHistorial() : List~Order~
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  + subtotal() : float
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - category_id : int
+  - base_price : float
+  - is_active : bool
+  + sonDestacados() : List~Product~
+  + consultar() : List~Product~
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  + effective_price() : float
+}
+
+CLI "1" --> RIA : pide recomendaciones
+RIA ..> U : conoce al cliente
+RIA ..> O : lee su historial
+O "1" -- "1..*" OI : contiene
+OI "*" -- "1" PV : prenda comprada
+RIA ..> P : sugiere productos
+P "1" -- "1..*" PV : ofrece
+
+note right of RIA
+  Tabla: NINGUNA.
+  Implementa: recommend()
+  en services/recommendations.py
+  Analiza las categorias que ya compro
+  el cliente y sugiere productos
+  parecidos. Si el cliente no tiene
+  historial, devuelve los productos
+  destacados.
+  Es de SOLO LECTURA: no escribe nada
+  en la base ni guarda lo que el usuario
+  vio.
+end note
+note right of O
+  Tabla: orders
+  PK: id
+  Se filtran los pedidos PAGADO del
+  cliente para inferir sus gustos.
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  Aporta que prendas compro.
+end note
+note right of P
+  Tabla: products
+  PK: id
+  Solo se recomiendan productos con
+  is_active = true.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+  El precio mostrado sale de
+  effective_price().
+end note
+note right of U
+  Tabla: users
+  PK: id
+end note
+@enduml
+
+
+================================================================================
+################  CU23 - Consultar asistente virtual (chatbot)  ################
+================================================================================
+@startuml CU23_Analisis
+title CU23 - Consultar asistente virtual chatbot (CICLO 3)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "AsistenteIA" as AIA <<boundary>> {
+  + generate_answer(mensaje, historial) : str
+  + _find_products(texto, limite) : List~Product~
+  + _stock_reply() : str
+  + _latest_order() : Order
+}
+
+class "ChatConversation" as CV <<entity>> {
+  - id : int
+  - client_id : int
+  - created_at : datetime
+  + iniciar() : ChatConversation
+  + listar() : List~ChatConversation~
+  + consultar() : ChatConversation
+}
+
+class "ChatMessage" as CM <<entity>> {
+  - id : int
+  - conversation_id : int
+  - role : str
+  - content : text
+  - created_at : datetime
+  + registrar() : ChatMessage
+  + listar() : List~ChatMessage~
+}
+
+class "Product" as P <<entity>> {
+  - id : int
+  - name : str
+  - base_price : float
+  - is_active : bool
+  + consultar() : List~Product~
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  + effective_price() : float
+}
+
+CLI "1" --> CV : inicia y consulta
+CV "1" -- "0..*" CM : contiene
+CV "*" -- "1" CLI : pertenece a
+CM ..> AIA : la pregunta
+AIA ..> P : busca prendas
+AIA ..> PV : responde precio
+P "1" -- "1..*" PV : ofrece
+
+note right of AIA
+  Tabla: NINGUNA.
+  Implementa: generate_answer()
+  en services/assistant.py
+  Responde con datos REALES del
+  proyecto: busca prendas por texto,
+  consulta tallas, sucursales, stock y
+  el ultimo pedido del cliente. No
+  inventa precios ni existencias.
+end note
+note right of CV
+  Tabla: chat_conversations
+  PK: id
+  FK: client_id -> users.id
+  Implementa: chat(), list_conversations(),
+  get_conversation()
+  Cada cliente tiene sus propias
+  conversaciones y solo ve las suyas.
+end note
+note right of CM
+  Tabla: chat_messages
+  PK: id
+  FK: conversation_id -> chat_conversations.id
+  El campo role guarda "user" o
+  "assistant". Los mensajes se guardan
+  en orden y el historial se usa como
+  contexto de la conversacion.
+end note
+note right of P
+  Tabla: products
+  PK: id
+  Fuente de datos de las respuestas.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+  Aporta el precio real via
+  effective_price().
+end note
+@enduml
+
+
+================================================================================
+################  CU24 - Generar reporte por comando de voz  ################
+================================================================================
+@startuml CU24_Analisis
+title CU24 - Generar reporte por comando de voz (CICLO 4, extension opcional)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+class "Encargado de Sucursal" as ENC <<actor>>
+
+class "ReporteVoz" as RV <<dto>> {
+  + transcripcion : str
+  + comando : str
+  + periodo : str
+  + narracion : str
+  + _detect_period(orden) : str
+  + interpretar() : str
+}
+
+class "DashboardReport" as DR <<dto>> {
+  + ventas : float
+  + pedidos : int
+  + ticket_promedio : float
+  + alertas_stock : List
+  + top_productos : List
+  + narracion : str
+}
+
+class "Order" as O <<entity>> {
+  - id : int
+  - status : str
+  - total : float
+  - created_at : datetime
+  + consultarPorPeriodo() : List~Order~
+}
+
+class "Payment" as PAY <<entity>> {
+  - id : int
+  - order_id : int
+  - amount : float
+  - status : str
+  - paid_at : datetime
+  + totalCobrado() : float
+}
+
+ADM "1" --> RV : pide el reporte por voz
+ENC "1" --> RV : pide el reporte por voz
+RV ..> DR : lo resume en texto
+DR ..> O : agrega
+DR ..> PAY : agrega
+
+note right of RV
+  Tabla: NINGUNA.
+  Implementa: voice_report(),
+  _resolve_voice(), _detect_period()
+  Recibe la frase ya transcrita,
+  entiende el periodo ("el mes pasado",
+  "hoy", "ultimos 30 dias"), arma el
+  dashboard y devuelve una narracion
+  legible para leer en voz alta.
+  Es una EXTENSION OPCIONAL de
+  prioridad baja: el enunciado la
+  separa del flujo obligatorio.
+end note
+note right of DR
+  Tabla: NINGUNA.
+  Reutiliza el mismo calculo que el
+  CU25 y le agrega el campo narracion.
+  Nada de esto se guarda: se calcula
+  cada vez que se pregunta.
+end note
+note right of O
+  Tabla: orders
+  PK: id
+  Se filtra por el periodo entendido.
+end note
+note right of PAY
+  Tabla: payments
+  PK: id
+  Suma lo efectivamente cobrado en el
+  periodo.
+end note
+@enduml
+
+
+================================================================================
+################  CU25 - Consultar reportes y dashboards  ################
+================================================================================
+@startuml CU25_Analisis
+title CU25 - Consultar reportes y dashboards (CICLO 4)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Administrador" as ADM <<actor>>
+class "Encargado de Sucursal" as ENC <<actor>>
+
+class "DashboardReport" as DR <<dto>> {
+  + ventas : float
+  + pedidos : int
+  + ticket_promedio : float
+  + alertas_stock : List
+  + top_productos : List
+  + por_sucursal : Map
+  + por_promocion : Map
+  + consultar(periodo) : DashboardReport
+}
+
+class "Order" as O <<entity>> {
+  - id : int
+  - branch_id : int
+  - order_type : str
+  - status : str
+  - total : float
+  - created_at : datetime
+  + consultarPorPeriodo() : List~Order~
+  + totalPorPeriodo() : float
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  + subtotal() : float
+  + topProductos() : List~Product~
+}
+
+class "Payment" as PAY <<entity>> {
+  - id : int
+  - order_id : int
+  - amount : float
+  - status : str
+  - paid_at : datetime
+  + totalCobrado() : float
+}
+
+class "Inventory" as INV <<entity>> {
+  - id : int
+  - variant_id : int
+  - branch_id : int
+  - available : int
+  + consultarAlertas() : List~Inventory~
+}
+
+ADM "1" --> DR : consulta el dashboard
+ENC "1" --> DR : consulta su sucursal
+DR ..> O : agrega ventas
+DR ..> OI : agrega top de productos
+DR ..> PAY : suma cobrado
+DR ..> INV : detecta faltantes
+
+note right of DR
+  Tabla: NINGUNA.
+  Implementa: get_dashboard()
+  y _build_dashboard()
+  Es una vista agregada: NO se persiste
+  en ninguna tabla, se calcula en cada
+  consulta. Si el dia esta mal escrito
+  se avisa, no se adivina el periodo.
+end note
+note right of O
+  Tabla: orders
+  PK: id
+  Filtra por created_at entre las fechas
+  y solo cuenta pedidos PAGADO.
+  El Encargado ve unicamente los de su
+  sucursal: la API lo filtra con la
+  sucursal del usuario.
+end note
+note bottom of DR
+  Tablas que tambien agrega:
+  order_items (PK id)
+    -> suma unidades por prenda
+       para el top de mas vendidos.
+  payments (PK id)
+    -> distingue lo cobrado de lo
+       facturado.
+  inventory (PK id)
+    -> alertas de stock bajo o agotado.
+  promotions (PK id)
+    -> cuantas promociones estan
+       activas.
+  branches (PK id)
+    -> desglose por sucursal.
+  Se leen con los getters de
+  products.py, reports.py e
+  inventory.py.
+end note
+@enduml
+
+
+================================================================================
+################  CU26 - Consultar historial de compras  ################
+================================================================================
+@startuml CU26_Analisis
+title CU26 - Consultar historial de compras (CICLO 4)
+
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class "Cliente" as CLI <<actor>>
+
+class "Order" as O <<entity>> {
+  - id : int
+  - client_id : int
+  - branch_id : int
+  - order_type : str
+  - status : str
+  - total : float
+  - shipping_address : str
+  - created_at : datetime
+  + listar() : List~Order~
+  + consultar() : Order
+  + totalGastado() : float
+}
+
+class "OrderItem" as OI <<entity>> {
+  - id : int
+  - order_id : int
+  - variant_id : int
+  - quantity : int
+  - unit_price : float
+  - discount : float
+  + subtotal() : float
+}
+
+class "ProductVariant" as PV <<entity>> {
+  - id : int
+  - product_id : int
+  - sku : str
+  + effective_price() : float
+}
+
+class "Payment" as PAY <<entity>> {
+  - id : int
+  - order_id : int
+  - amount : float
+  - method : str
+  - status : str
+  - paid_at : datetime
+  + consultar() : Payment
+}
+
+class "Notification" as N <<entity>> {
+  - id : int
+  - user_id : int
+  - title : str
+  - message : text
+  - is_read : bool
+  - created_at : datetime
+  + listar() : List~Notification~
+  + marcarLeida() : void
+}
+
+class "Branch" as B <<entity>> {
+  - id : int
+  - name : str
+  + consultar() : Branch
+}
+
+CLI "1" --> "0..*" O : revisa su historial
+CLI "1" --> "0..*" N : revisa sus avisos
+O "1" -- "1..*" OI : contiene
+OI "*" -- "1" PV : prenda comprada
+O "1" -- "0..1" PAY : se paga con
+O "0..1" -- "0..1" B : se entrega en
+N "*" -- "1" CLI : recibe
+
+note right of O
+  Tabla: orders
+  PK: id
+  FK: client_id -> users.id
+  Implementa: list_orders(), get_order()
+  El cliente solo ve SUS pedidos: la
+  consulta filtra por client_id, asi
+  que no puede pedir el pedido de otro
+  usuario.
+  Muestra el estado de cada compra:
+  PENDIENTE, PAGADO, ENVIADO,
+  ENTREGADO o CANCELADO.
+end note
+note right of OI
+  Tabla: order_items
+  PK: id
+  Detalle de que prendas y de que
+  tamano y color se llevo.
+end note
+note right of PAY
+  Tabla: payments
+  PK: id   UNIQUE: order_id
+  El historial muestra si quedo PAGADO
+  o si el pago quedo FALLIDO.
+end note
+note right of N
+  Tabla: notifications
+  PK: id
+  FK: user_id -> users.id
+  Implementa: list_notifications(),
+  mark_notification_read()
+  Aqui el cliente ve los avisos que le
+  dejo el sistema al crear una reserva,
+  pagar un pedido o cuando se agota una
+  prenda.
+end note
+note right of PV
+  Tabla: product_variants
+  PK: id
+end note
+note right of B
+  Tabla: branches
+  PK: id
+  Indica donde se entrego el pedido.
+end note
+@enduml
+
+
+================================================================================
+CHECKLIST ANTES DE ENTREGAR
+================================================================================
+[ ] Los 26 diagramas estan completos: CU1 a CU26, uno por caso de uso.
+[ ] Cada diagrama tiene su actor en la parte superior, con la asociacion y la
+    multiplicidad hacia las entidades.
+[ ] Cada clase muestra los metodos del caso de uso y sus atributos.
+[ ] Cada clase persistente lleva debajo el nombre real de su tabla, su PK y sus
+    FK, y se puede cotejar con backend/app/models/.
+[ ] Las clases sin tabla (VestidorAR, PasarelaPago, RecomendadorIA,
+    AsistenteIA, ReporteVoz, DashboardReport) lo dicen explicitamente, para
+    que el profesor no las tome por un error de modelado.
+[ ] Las 25 tablas del proyecto aparecen en al menos un diagrama; ninguna se
+    invento.
+[ ] Los nombres de metodo coinciden con las funciones reales de
+    backend/app/api/ y backend/app/services/.
+[ ] El reparto de casos de uso por ciclo coincide con el Documento
+    parcial si2.pdf.
+
+
+

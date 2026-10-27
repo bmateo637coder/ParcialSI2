@@ -13,6 +13,8 @@ from app.api import (
     reports,
     users,
 )
+from app.api.v1.endpoints import plataforma, sync
+from app.api import ia_reportes, analitica_ml
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import (
@@ -112,6 +114,10 @@ app.include_router(assistant.router, prefix=f"{settings.API_PREFIX}", tags=["Asi
 app.include_router(reports.router, prefix=f"{settings.API_PREFIX}/reports", tags=["Reportes y dashboards"])
 app.include_router(promotions.router, prefix=f"{settings.API_PREFIX}/promotions", tags=["Promociones"])
 app.include_router(providers.router, prefix=f"{settings.API_PREFIX}/providers", tags=["Portal proveedor"])
+app.include_router(plataforma.router, prefix=f"{settings.API_PREFIX}/plataforma", tags=["Plataforma SaaS"])
+app.include_router(sync.router, prefix=f"{settings.API_PREFIX}/sync", tags=["Sincronización Offline"])
+app.include_router(ia_reportes.router, prefix=f"{settings.API_PREFIX}/reportes", tags=["Reportes IA"])
+app.include_router(analitica_ml.router, prefix=f"{settings.API_PREFIX}/analitica", tags=["Analítica ML"])
 
 
 @app.get("/", tags=["Info"])

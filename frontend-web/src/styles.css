@@ -100,6 +100,9 @@ a:hover { color: var(--accent-dark); }
   justify-content: space-between;
   align-items: center;
   min-height: 64px;
+  /* La barra puede ocupar dos filas antes que forzar scroll horizontal. */
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -112,7 +115,17 @@ a:hover { color: var(--accent-dark); }
 }
 .navbar-brand span { color: var(--accent); }
 
-.nav-links { display: flex; gap: 1.75rem; align-items: center; }
+/* `min-width: 0` + `flex-wrap` permiten que los enlaces bajen de linea en
+   cualquier ancho. Sin esto, `.nav-links` conserva el ancho de su contenido
+   (~1200px) y desborda la pagina en tablet y laptop pequena. */
+.nav-links {
+  display: flex;
+  gap: 1.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
 
 .nav-item {
   color: #d6d0c4;
@@ -221,6 +234,7 @@ a:hover { color: var(--accent-dark); }
 }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2rem; }
+.grid-refs { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; }
 .grid-sm { gap: 1.25rem; }
 
 /* ============================================================
@@ -464,6 +478,7 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   overflow-y: auto;
   animation: slideUp 0.25s ease;
 }
+.modal-wide { max-width: 720px; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 
 .modal-head {
@@ -525,7 +540,8 @@ textarea.form-control { min-height: 90px; resize: vertical; }
 /* ============================================================
    Tabs de admin
    ============================================================ */
-.admin-tabs { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--line); margin-bottom: 1.75rem; }
+.admin-tabs { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--line); margin-bottom: 1.75rem;
+  overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
 .admin-tab {
   border: none;
   background: none;
@@ -537,6 +553,8 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   cursor: pointer;
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .admin-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
 
@@ -624,7 +642,10 @@ textarea.form-control { min-height: 90px; resize: vertical; }
 
 @media (max-width: 768px) {
   .navbar { padding: 0 1rem; flex-wrap: wrap; gap: 0.4rem; }
-  .nav-links { gap: 0.9rem; }
+  /* La barra completa (marca + enlaces + sesion) no entra en tablet: los enlaces
+     pasan a una segunda linea en vez de desbordar la pagina. `min-width: 0` es
+     necesario para que el flex item pueda encogerse y envolver sus enlaces. */
+  .nav-links { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: center; gap: 0.35rem 1.1rem; }
   .user-chip .chip-text { display: none; }
 }
 
@@ -634,4 +655,43 @@ textarea.form-control { min-height: 90px; resize: vertical; }
   .nav-item { font-size: 0.85rem; padding: 0.3rem 0; }
   .btn-small-nav { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
   .user-chip { font-size: 0.8rem; }
+}
+
+/* ============================================================
+   Panel administrativo en pantallas pequenas (CU3)
+   Las tabs se desplazan en horizontal, las tablas hacen scroll
+   dentro de su contenedor y los formularios ocupan el ancho.
+   ============================================================ */
+@media (max-width: 900px) {
+  /* Las tabs no deben empujar el ancho de la pagina: scroll horizontal dentro
+     de su propia caja (sin margenes negativos, que desbordaban la tarjeta). */
+  .admin-tabs { gap: 0.15rem; }
+  .admin-tab { padding: 0.7rem 0.85rem; font-size: 0.88rem; }
+
+  /* Tabla: se desplaza dentro de .table-wrap en vez de desbordar el body. */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -1.75rem;
+    padding: 0 1.75rem;
+  }
+  .table { min-width: 560px; }
+  .table th, .table td { padding: 0.7rem 0.75rem; }
+  .table .actions { flex-wrap: wrap; justify-content: flex-end; }
+
+  /* Toolbar: el boton principal ocupa el ancho completo. */
+  .toolbar { align-items: stretch; }
+  .toolbar > .btn { width: 100%; }
+
+  /* Rejillas de una sola columna. */
+  .grid, .grid-refs { grid-template-columns: 1fr; }
+
+  /* Modales casi a pantalla completa, como hojas inferiores. */
+  .modal-backdrop { padding: 0.6rem; align-items: flex-end; }
+  .modal,
+  .modal-wide { max-width: 100%; max-height: 94vh; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .modal-head { padding: 1rem 1.1rem; }
+  .modal-body { padding: 1.1rem; }
+  .modal-foot { padding: 0.85rem 1.1rem 1.1rem; flex-wrap: wrap; }
+  .modal-foot .btn { flex: 1 1 45%; }
 }

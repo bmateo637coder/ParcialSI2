@@ -17,6 +17,8 @@ import { ReportsGuard } from './reports.guard';
 import { ProviderGuard } from './provider.guard';
 import { PromosComponent } from './promos.component';
 import { ProviderComponent } from './provider.component';
+import { SyncComponent } from './features/offline/sync/sync.component';
+import { ReportesIaComponent } from './features/reportes-ia/reportes-ia.component';
 
 export const routes: Routes = [
   { path: '', component: CatalogComponent },
@@ -31,6 +33,8 @@ export const routes: Routes = [
   { path: 'promos', component: PromosComponent, canActivate: [AdminGuard] },
   { path: 'provider', component: ProviderComponent, canActivate: [ProviderGuard] },
   { path: 'reports', component: ReportsComponent, canActivate: [ReportsGuard] },
+  { path: 'reportes-ia', component: ReportesIaComponent, canActivate: [ReportsGuard] },
+  { path: 'offline/sync', component: SyncComponent, canActivate: [StaffGuard] },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: '**', redirectTo: '' },
 ];

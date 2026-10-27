@@ -156,7 +156,7 @@ interface InventoryMovementRow {
     <section *ngIf="tab === 'catalog'">
       <h2>Datos de referencia</h2>
       <p style="color:var(--muted); margin-bottom:1.5rem;">Agrega categorías, temporadas, tallas, colores y proveedores que luego se usan en el formulario de productos.</p>
-      <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+      <div class="grid grid-refs">
         <div class="card" *ngFor="let ref of refForms">
           <h3 style="margin-bottom:1rem;">{{ ref.label }}</h3>
           <div class="form-group" style="margin-bottom:.75rem;">
@@ -353,7 +353,7 @@ interface InventoryMovementRow {
 
   <!-- MODAL PRODUCTO -->
   <div class="modal-backdrop" *ngIf="prodModalOpen" (click.self)="closeProduct()">
-    <div class="modal" style="max-width: 720px;">
+    <div class="modal modal-wide">
       <div class="modal-head">
         <h3>{{ productForm.id ? 'Editar producto' : 'Nuevo producto' }}</h3>
         <button class="modal-close" (click)="closeProduct()">&times;</button>

@@ -1,0 +1,2314 @@
+
+===== PAGINA 1 =====
+UNIVERSIDAD AUTÓNOMA GABRIEL RENÉ MORENO
+FACULTAD EN CIENCIAS DE LA COMPUTACIÓN Y TELECOMUNICACIONES
+GRUPO #2
+Plataforma de comercio electrónico para tienda de ropa con vestidores virtuales que
+utilice realidad aumentada
+INTEGRANTES:
+Barrios Lozano Juan Pablo Mateo 221043810
+Contreras Fuentes Santiago 222008059
+DOCENTE: Ing. Angelica Garzon Cuellar
+MATERIA: Sistemas de Información II
+SEMESTRE: 2/2026
+Santa Cruz - Bolivia
+
+===== PAGINA 2 =====
+1
+1. PERFIL................................................................................................................................2
+1.1. Introducción.................................................................................................................2
+1.2. Objetivo General.........................................................................................................4
+1.3. Objetivos Específicos..................................................................................................4
+1.4. Descripción del problema............................................................................................5
+1.5. Alcance........................................................................................................................6
+1.5.1. MÓDULO 1: GESTIÓN DE USUARIOS, ROLES Y AUTENTICACIÓN.............6
+1.5.2. MÓDULO 2: GESTIÓN DE SUCURSALES Y CIUDADES................................7
+1.5.3. MÓDULO 3: GESTIÓN DE CATÁLOGO DE PRODUCTOS..............................7
+1.5.4. MÓDULO 4: GESTIÓN DE PROVEEDORES....................................................7
+1.5.5. MÓDULO 5: CONSULTA DE CATÁLOGO Y DISPONIBILIDAD........................8
+1.5.6. MÓDULO 6: VESTIDOR VIRTUAL (REALIDAD AUMENTADA).......................8
+1.5.7. MÓDULO 7: RESERVA DE PRENDAS.............................................................9
+1.5.8. MÓDULO 8: CARRITO Y COMPRA DIGITAL....................................................9
+1.5.9. MÓDULO 9: COMPRA PRESENCIAL Y PUNTO DE VENTA...........................9
+1.5.10. MÓDULO 10: PASARELA DE PAGOS ELECTRÓNICOS.............................10
+1.5.11. MÓDULO 11: GESTIÓN DE INVENTARIO Y MOVIMIENTOS......................10
+1.5.12. MÓDULO 12: INTELIGENCIA ARTIFICIAL — RECOMENDACIÓN Y
+ASISTENCIA..............................................................................................................11
+1.5.13. MÓDULO 13: REPORTES Y DASHBOARDS................................................11
+Parte I – Fundamentación Teórica...................................................................................12
+a) E-commerce (Comercio Electrónico).....................................................................12
+1. Como usuario: Funcionamiento de plataformas líderes...................................12
+2. Como desarrollador: Creación de tiendas online.............................................12
+b) Pasarelas de pago.................................................................................................13
+1. Formas de pago online.....................................................................................13
+2. Pasarela local: LIBÉLULA................................................................................13
+3. Pasarelas internacionales: PayPal y STRIPE..................................................13
+c) Deliverys.................................................................................................................14
+1. Funcionamiento (Ej. Yaigo / Yummy)...............................................................14
+2. Cálculo de pagos por entrega..........................................................................14
+d) PUDS (Proceso Unificado de Desarrollo de Software)..........................................14
+e) UML (Lenguaje Unificado de Modelado)................................................................15
+PARTE II – PROCESO DE DESARROLLO.....................................................................15
+1. Flujo de Trabajo: Captura de Requisitos.......................................................................15
+1.1. Identificación de Actores y Casos de Uso.................................................................15
+Actores del sistema....................................................................................................16
+Catálogo de Casos de Uso........................................................................................16
+1.2. Priorización de Casos de Uso...................................................................................18
+Los 7 casos de uso básicos del Ciclo 1.....................................................................18
+Resumen por ciclo......................................................................................................18
+Detalle de priorización................................................................................................19
+1.3. Detallar Casos de Uso..............................................................................................21
+CICLO 1.....................................................................................................................21
+
+===== PAGINA 3 =====
+2
+1.4 Prototipo.....................................................................................................................29
+1.5. Estructurar el Modelo de Caso de Uso.....................................................................29
+2. Flujo de Trabajo: Análisis................................................................................................30
+2.1. Identificar paquetes...................................................................................................30
+2.1.1. Identificar paquetes..........................................................................................30
+2.1.2. Relacionar paquetes y casos de uso...............................................................33
+2.1.3. Vista de paquetes.............................................................................................35
+2.2. Diagrama de Comunicación...................................................................................38
+Ciclo #1......................................................................................................................38
+2.3. Diagrama de Análisis de una Clase.......................................................................41
+Ciclo #1......................................................................................................................41
+2.4. Análisis de Paquete................................................................................................44
+Análisis Funcional de las Dependencias....................................................................45
+ANEXOS................................................................................................................................47
+1. PERFIL
+1.1. Introducción
+
+===== PAGINA 4 =====
+3
+El comercio minorista de indumentaria enfrenta una transformación acelerada en la que la
+experiencia de compra ya no puede entenderse como dos canales independientes tienda física
+y tienda digital sino como un único recorrido continuo del cliente. Las cadenas de tiendas de
+ropa que operan en varias ciudades y sucursales requieren, además, sincronizar información
+de inventario, temporadas, colecciones y proveedores en tiempo real para evitar decisiones
+comerciales basadas en datos desactualizados o fragmentados por local.
+El presente documento describe el desarrollo de FashionStore, una Plataforma Inteligente de
+Comercio Electrónico orientada a una cadena de tiendas de ropa con presencia en múltiples
+ciudades y sucursales. La plataforma integra una aplicación web (Angular) y una aplicación
+móvil (Flutter), permitiendo al cliente consultar el catálogo de prendas, revisar la
+disponibilidad por sucursal, seleccionar tallas y colores, y reservar varias prendas para
+probárselas físicamente en los vestidores de una sucursal antes de decidir su compra.
+Como elemento diferenciador, la plataforma incorpora un vestidor virtual mediante realidad
+aumentada, que permite al cliente visualizar, a través de la cámara de su dispositivo móvil,
+una aproximación de cómo luciría una prenda antes de acudir a la tienda o de tomar una
+decisión de compra digital. Dado el marco temporal del proyecto (cuatro semanas) y su
+carácter académico, el alcance de este módulo se define explícitamente como un Producto
+Mínimo Viable: una superposición visual de la prenda sobre la imagen capturada por la
+cámara, sin pretender una simulación fotorrealista de caída de tela ni un motor de renderizado
+3D completo. Esta decisión de alcance se documenta desde esta sección para evitar que el
+módulo de mayor riesgo técnico comprometa la entrega de los módulos funcionales núcleo
+del negocio.
+El proceso de compra podrá completarse de dos formas: de manera presencial, cuando el
+cliente prueba las prendas reservadas y paga en el punto de caja de la sucursal; o de manera
+digital, cuando el cliente realiza la compra desde la aplicación web o móvil mediante una
+pasarela de pago electrónica. En ambos casos, el sistema deberá actualizar automáticamente
+el inventario correspondiente, considerando producto, talla, color, sucursal y temporada,
+evitando así discrepancias entre lo que el cliente ve disponible y lo que realmente existe en
+cada local.
+La arquitectura del sistema se sustenta en un backend centralizado desarrollado en FastAPI,
+con una base de datos relacional PostgreSQL, encargado de administrar usuarios, roles,
+sucursales, catálogo, proveedores, temporadas, colecciones, reservas, ventas, inventario y
+pagos. Esta arquitectura es intencionalmente distinta de un modelo multi-tenant SaaS:
+FashionStore es una única organización con múltiples sucursales, no una plataforma que aloja
+a múltiples redes de talleres o empresas independientes, por lo que el aislamiento de datos se
+resuelve mediante la relación producto–sucursal y no mediante un identificador de tenant.
+Adicionalmente, la plataforma incorpora un componente de inteligencia artificial orientado a
+la recomendación de prendas, capaz de sugerir productos considerando las preferencias del
+cliente, su historial de navegación o compra, la temporada vigente, la categoría, la talla y la
+disponibilidad real. El desarrollo del proyecto sigue el Proceso Unificado de Desarrollo de
+
+===== PAGINA 5 =====
+4
+Software (PUDS) y se modela mediante UML 2.5+, con un despliegue final en la nube,
+restricción explícita del enunciado del examen para garantizar que la solución sea accesible
+fuera de un entorno local.
+1.2. Objetivo General
+Desarrollar una plataforma inteligente de comercio electrónico para una cadena de tiendas de
+ropa con presencia en múltiples ciudades y sucursales, que integre catálogo digital, reservas
+de prendas para prueba física, vestidores virtuales mediante realidad aumentada, compra
+presencial y digital, pasarela de pagos electrónicos, gestión de inventario multi-sucursal,
+gestión de proveedores y temporadas, e inteligencia artificial de recomendación, utilizando el
+Proceso Unificado de Desarrollo de Software y modelado UML 2.5+, con despliegue en la
+nube.
+1.3. Objetivos Específicos
+● Analizar y especificar los requisitos funcionales y no funcionales del sistema a
+partir del enunciado del proyecto.
+● Diseñar el modelo de actores y roles del sistema: Cliente, Administrador,
+Encargado de sucursal, Cajero, Proveedor, Sistema de pagos y Servicio de
+inteligencia artificial.
+● Implementar la gestión de sucursales y ciudades, permitiendo administrar la
+información de cada punto de venta físico.
+● Desarrollar el módulo de catálogo de productos, incluyendo categorías, tallas,
+colores, temporadas y colecciones.
+● Implementar la gestión de proveedores y su asociación con productos,
+temporadas y colecciones comerciales.
+● Permitir al cliente consultar el catálogo y la disponibilidad de prendas por
+sucursal desde las aplicaciones web y móvil.
+● Incorporar un vestidor virtual mediante realidad aumentada, delimitado a un
+alcance de Producto Mínimo Viable acorde al tiempo de desarrollo del proyecto.
+
+===== PAGINA 6 =====
+5
+● Permitir al cliente reservar varias prendas indicando sucursal y horario
+aproximado de atención, y notificar la reserva a la sucursal correspondiente.
+● Desarrollar el flujo de compra digital mediante carrito de compras desde la
+aplicación web y la aplicación móvil.
+● Implementar el flujo de compra presencial y punto de venta (caja), incluyendo
+el registro de ventas y la emisión de comprobantes.
+● Integrar una pasarela de pago electrónica para las compras digitales, operando
+en modo de prueba (sandbox) por tratarse de un proyecto académico.
+● Diseñar un mecanismo de actualización automática de inventario tras reservas,
+ventas, devoluciones y recepción de productos, consolidado por producto, talla,
+color y sucursal.
+● Incorporar una funcionalidad de inteligencia artificial orientada a la
+recomendación de prendas en función de preferencias, historial, temporada,
+categoría y disponibilidad.
+● Diseñar reportes y dashboards que apoyen la toma de decisiones sobre ventas,
+reservas e inventario.
+● Modelar el sistema aplicando UML 2.5+ en cada flujo de trabajo del Proceso
+Unificado de Desarrollo de Software: captura de requisitos, análisis, diseño,
+implementación y pruebas.
+● Implementar el sistema utilizando FastAPI (backend), Angular (aplicación
+web) y Flutter/Dart (aplicación móvil), con PostgreSQL como motor de base de
+datos, sin recurrir a frameworks de comercio electrónico preexistentes, y
+desplegar la solución en la nube.
+1.4. Descripción del problema
+
+===== PAGINA 7 =====
+6
+Actualmente, una cadena de tiendas de ropa con presencia en varias ciudades enfrenta una
+desconexión estructural entre su operación física y su presencia digital. El cliente que desea
+probarse una prenda antes de comprarla depende de acudir directamente a una sucursal sin
+certeza previa de si la talla, el color o el modelo específico se encuentran disponibles en ese
+local, lo que genera visitas infructuosas y una experiencia de compra ineficiente.
+Del lado de la operación, cada sucursal gestiona su inventario de forma poco integrada
+respecto a las demás, dificultando conocer en tiempo real qué prendas están disponibles,
+reservadas, vendidas, agotadas o próximas a ingresar a nivel de toda la cadena. Esta falta de
+visibilidad consolidada afecta tanto la reposición oportuna de productos como la toma de
+decisiones comerciales sobre qué temporadas o colecciones tienen mejor rotación.
+Asimismo, la empresa trabaja con múltiples proveedores que suministran productos de
+distintas temporadas comerciales (primavera-verano, otoño-invierno, temporada escolar,
+promociones especiales, nuevas colecciones), sin un mecanismo centralizado que permita
+administrar esa relación de forma ordenada y trazable.
+Por otro lado, la ausencia de una experiencia digital enriquecida como la posibilidad de
+visualizar de forma anticipada cómo luciría una prenda limita la capacidad de la empresa para
+reducir la incertidumbre del cliente antes de una compra digital, y la deja en desventaja frente
+a competidores que ya incorporan tecnologías de este tipo. Finalmente, la empresa carece de
+un mecanismo de recomendación inteligente que aproveche el historial y las preferencias del
+cliente para sugerir productos relevantes, así como de reportes consolidados que permitan
+evaluar el desempeño de ventas e inventario por sucursal, ciudad o temporada.
+1.5. Alcance
+El sistema cubrirá la gestión integral del comercio electrónico de una cadena de tiendas de
+ropa con múltiples sucursales y ciudades, integrando catálogo digital, reservas de prendas,
+vestidores virtuales mediante realidad aumentada, compra presencial y digital, pasarela de
+pagos, gestión de inventario, proveedores, temporadas y colecciones, inteligencia artificial de
+recomendación, y reportes operativos. Queda explícitamente fuera de alcance el uso de
+frameworks de comercio electrónico preexistentes (PrestaShop, Shopify, Magento,
+WooCommerce o similares); toda la lógica de negocio se construye de manera propia sobre
+FastAPI, Angular y Flutter, con despliegue final en la nube.
+1.5.1. MÓDULO 1: GESTIÓN DE USUARIOS, ROLES Y AUTENTICACIÓN
+Objetivo: Permitir el registro, autenticación y control de acceso de los usuarios del sistema
+según su rol (cliente, administrador, encargado de sucursal, cajero o proveedor).
+Casos de Uso:
+● Registrar usuario
+
+===== PAGINA 8 =====
+7
+● Iniciar sesión
+● Cerrar sesión
+● Consultar y editar perfil
+● Asignar y validar rol de acceso
+1.5.2. MÓDULO 2: GESTIÓN DE SUCURSALES Y CIUDADES
+Objetivo: Administrar la información de las sucursales físicas de la cadena y las ciudades en
+las que opera, como base para la disponibilidad y el inventario por local.
+Casos de Uso:
+● Registrar sucursal
+● Editar sucursal
+● Consultar sucursales por ciudad
+● Asignar encargado a sucursal
+1.5.3. MÓDULO 3: GESTIÓN DE CATÁLOGO DE PRODUCTOS
+Objetivo: Mantener actualizado el catálogo de prendas de vestir, incluyendo categorías, tallas,
+colores, temporadas y colecciones.
+Casos de Uso:
+● Registrar producto
+● Editar producto
+● Gestionar categorías, tallas y colores
+● Gestionar temporadas y colecciones
+● Asociar producto a proveedor y temporada
+1.5.4. MÓDULO 4: GESTIÓN DE PROVEEDORES
+
+===== PAGINA 9 =====
+8
+Objetivo: Administrar la información de los proveedores de la empresa y su relación con los
+productos, temporadas y colecciones que suministran.
+Casos de Uso:
+● Registrar proveedor
+● Editar proveedor
+● Asociar productos a proveedor
+● Consultar histórico de suministro
+1.5.5. MÓDULO 5: CONSULTA DE CATÁLOGO Y DISPONIBILIDAD
+Objetivo: Permitir al cliente consultar el catálogo de prendas y su disponibilidad específica
+por sucursal desde la aplicación web y móvil.
+Casos de Uso:
+● Consultar catálogo (web y móvil)
+● Buscar y filtrar prendas
+● Consultar tallas y colores disponibles
+● Consultar disponibilidad por sucursal
+1.5.6. MÓDULO 6: VESTIDOR VIRTUAL (REALIDAD AUMENTADA)
+Objetivo: Permitir al cliente visualizar mediante la cámara de su dispositivo móvil una
+aproximación visual de cómo luciría una prenda seleccionada del catálogo. Alcance
+delimitado a un Producto Mínimo Viable de superposición visual, sin simulación física de
+tela ni modelado 3D completo.
+Casos de Uso:
+● Activar vestidor virtual
+● Seleccionar prenda del catálogo para probar virtualmente
+● Visualizar superposición de la prenda en tiempo real
+
+===== PAGINA 10 =====
+9
+● Volver al catálogo o continuar hacia la reserva/compra
+1.5.7. MÓDULO 7: RESERVA DE PRENDAS
+Objetivo: Permitir al cliente reservar varias prendas indicando la sucursal y un horario
+aproximado para probarlas físicamente antes de decidir su compra.
+Casos de Uso:
+● Seleccionar prendas para reservar
+● Elegir sucursal y horario de atención
+● Confirmar reserva
+● Consultar estado de la reserva
+● Cancelar reserva
+● Notificar la reserva a la sucursal
+● Preparar prendas reservadas (encargado de sucursal)
+1.5.8. MÓDULO 8: CARRITO Y COMPRA DIGITAL
+Objetivo: Permitir al cliente añadir productos a un carrito de compras y finalizar la compra
+digital desde la aplicación web o móvil.
+Casos de Uso:
+● Agregar producto al carrito
+● Editar o vaciar el carrito
+● Confirmar compra desde la plataforma web
+● Confirmar compra desde la aplicación móvil
+1.5.9. MÓDULO 9: COMPRA PRESENCIAL Y PUNTO DE VENTA
+Objetivo: Permitir que el cajero registre ventas presenciales una vez que el cliente decide qué
+prendas comprar tras probárselas en la sucursal.
+
+===== PAGINA 11 =====
+10
+Casos de Uso:
+● Registrar venta presencial
+● Procesar pago en el punto de caja
+● Emitir comprobante de venta
+● Actualizar inventario tras la venta presencial
+1.5.10. MÓDULO 10: PASARELA DE PAGOS ELECTRÓNICOS
+Objetivo: Permitir que los clientes realicen pagos digitales por sus compras en línea mediante
+una pasarela de pago en modo de prueba.
+Casos de Uso:
+● Seleccionar método de pago digital
+● Iniciar transacción mediante pasarela
+● Confirmar o rechazar la transacción
+● Actualizar el estado del pago
+● Generar comprobante de pago digital
+1.5.11. MÓDULO 11: GESTIÓN DE INVENTARIO Y MOVIMIENTOS
+Objetivo: Mantener el control de existencias de cada sucursal y registrar los movimientos
+derivados de reservas, ventas, devoluciones y recepción de productos.
+Casos de Uso:
+● Actualizar inventario tras reserva o venta
+● Registrar ingreso de productos
+● Consultar existencias consolidadas por sucursal
+● Consultar productos agotados o próximos a ingresar
+
+===== PAGINA 12 =====
+11
+1.5.12. MÓDULO 12: INTELIGENCIA ARTIFICIAL — RECOMENDACIÓN Y
+ASISTENCIA
+Objetivo: Proporcionar funcionalidades inteligentes que apoyen al cliente en la elección de
+productos y, de forma extendida según el tiempo disponible, a la administración en la
+generación de reportes.
+Casos de Uso:
+● Analizar preferencias e historial del cliente
+● Recomendar prendas según temporada, categoría, talla y disponibilidad
+● Consultar asistente virtual
+● (Extensión opcional) Generar reportes mediante comando de voz
+1.5.13. MÓDULO 13: REPORTES Y DASHBOARDS
+Objetivo: Brindar a los administradores una vista analítica de ventas, reservas e inventario
+para apoyar la toma de decisiones.
+Casos de Uso:
+● Consultar reporte de ventas
+● Consultar reporte de inventario
+● Visualizar indicadores por sucursal y ciudad
+● Filtrar información por temporada o categoría
+
+===== PAGINA 13 =====
+12
+Parte I – Fundamentación Teórica
+a) E-commerce (Comercio Electrónico)
+El comercio electrónico o e-commerce consiste en la distribución, venta, compra, marketing
+y suministro de información de productos o servicios a través de Internet. Sus características
+principales incluyen la ubicuidad (disponible en cualquier lugar y momento), el alcance
+global, la interactividad, la densidad de la información y la personalización.
+1. Como usuario: Funcionamiento de plataformas líderes
+Desde la perspectiva de un comprador o comerciante (usuario final), estas plataformas
+ofrecen experiencias distintas:
+● Amazon: Funciona principalmente bajo un modelo B2C (Business to Consumer) y de
+Marketplace. Como usuario, ingresas a un catálogo inmenso unificado. Amazon
+gestiona el inventario propio y el de terceros (FBA - Fulfillment by Amazon). Su
+éxito radica en la logística extrema, la suscripción (Prime), las recomendaciones
+impulsadas por IA, el sistema de reseñas verificadas y la fricción casi nula en el pago
+(compras en 1-clic).
+● Alibaba: Su enfoque principal es el modelo B2B (Business to Business). Sirve como
+un directorio global que conecta a fabricantes y mayoristas chinos con compradores
+de todo el mundo. Como usuario, no sueles comprar una sola unidad (como en
+Amazon), sino que negocias volúmenes, pides muestras, acuerdas términos de envío
+(Incoterms) y utilizas su sistema de pago seguro en garantía (Trade Assurance/Alipay)
+que retiene el dinero hasta que el comprador confirma la recepción conforme.
+● Shopify: A diferencia de los anteriores, Shopify es un SaaS (Software as a Service).
+Como usuario creador de tiendas, pagas una suscripción mensual para tener acceso a
+un creador de sitios web donde subes tus productos, configuras envíos y pasarelas de
+pago sin tocar código. Para el usuario comprador final, la experiencia es transparente:
+entra a una página con su propio dominio y marca, sin saber necesariamente que la
+tecnología detrás es Shopify.
+2. Como desarrollador: Creación de tiendas online
+Para un desarrollador, las siguientes herramientas son Sistemas de Gestión de Contenido
+(CMS) o plataformas diseñadas para construir la infraestructura del e-commerce:
+● Magento (Adobe Commerce): plataforma de código abierto escrita en PHP, robusta
+y escalable. Sirve para crear tiendas de nivel empresarial con catálogos masivos.
+Beneficios: control total sobre el código, manejo de multitienda desde un solo panel e
+integraciones profundas con ERP/CRM. Se usa mediante un servidor web robusto y
+conocimientos avanzados de PHP y bases de datos; no es una opción para
+principiantes.
+● PrestaShop: también de código abierto y basada en PHP. Ideal para pequeñas y
+medianas empresas que necesitan una tienda funcional rápidamente. Beneficios: curva
+
+===== PAGINA 14 =====
+13
+de aprendizaje moderada, panel de administración intuitivo y miles de módulos y
+plantillas prefabricadas. Se usa descargando el software, instalándolo en un hosting
+propio (stack LAMP) y configurando la tienda mediante módulos.
+● WooCommerce: plugin de código abierto para WordPress. Transforma un sitio de
+WordPress en una tienda online funcional. Beneficios: facilidad de uso si ya se conoce
+WordPress, comunidad enorme de desarrolladores y alta personalización. Se usa
+instalando WordPress, añadiendo el plugin gratuito, configurando moneda y métodos
+de pago, y subiendo productos mediante los "Custom Post Types" de WordPress.
+b) Pasarelas de pago
+Una pasarela de pago es el servicio que autoriza el procesamiento de pagos con tarjetas o
+métodos digitales para negocios online, actuando como intermediario seguro entre el sitio
+web, el cliente y el banco.
+1. Formas de pago online
+● Tarjetas de débito/crédito: El cliente ingresa los datos de su tarjeta (PAN, Fecha de
+vencimiento, CVV). La pasarela encripta estos datos (usualmente mediante
+tokenización) y los envía a la red de la tarjeta (Visa/Mastercard) y al banco emisor
+para validar fondos y medidas antifraude (como 3D Secure).
+● Códigos QR (Pago Simple): Especialmente popular en Bolivia (QR BCB). El
+sistema genera un código QR dinámico que contiene el monto y la cuenta destino. El
+usuario lo escanea con la app de su banco, el banco procesa la transferencia inmediata
+y envía un webhook (notificación) a la tienda confirmando el pago al instante.
+● Transferencias Bancarias: Método tradicional. El cliente recibe los datos de la
+cuenta de la tienda, realiza el depósito y usualmente debe enviar un comprobante (o el
+sistema lo concilia por un código único de referencia).
+2. Pasarela local: LIBÉLULA
+Libélula es una pasarela de pagos y recaudadora boliviana muy popular en nuestro medio.
+Funcionamiento: Ofrece una solución omnicanal (Multipago) que permite a las empresas
+bolivianas cobrar a través de múltiples métodos integrados en una sola API.
+Beneficios locales: Soporta pago con Tarjetas de crédito/débito habilitadas para compras por
+internet (Red Enlace/Linkser), cobros por QR Simple, Tigo Money y efectivo en entidades
+financieras asociadas. Para un comercio boliviano, soluciona el problema de tener que
+afiliarse banco por banco, centralizando las transacciones.
+3. Pasarelas internacionales: PayPal y STRIPE
+● PayPal: Funciona como una billetera digital. El usuario asocia su tarjeta o cuenta
+bancaria a su cuenta de PayPal. Al pagar en la tienda, el cliente es redirigido a PayPal,
+inicia sesión y aprueba el pago. Beneficio: El comercio nunca ve los datos de la tarjeta
+del cliente, generando mucha confianza.
+● Stripe: Es la pasarela preferida por los desarrolladores a nivel mundial por su API
+moderna y flexible. A diferencia de PayPal, Stripe está diseñado como una plataforma
+de marca blanca (white-label); el cliente ingresa su tarjeta directamente en la página
+
+===== PAGINA 15 =====
+14
+de la tienda (el formulario está alojado de forma segura por Stripe) sin salir del flujo
+de compra. Facilita la gestión de suscripciones, división de pagos (para marketplaces)
+y maneja más de 135 divisas.
+c) Deliverys
+Las plataformas de delivery actúan como intermediarios logísticos conectando tres actores: el
+comercio, el cliente y el repartidor (driver/rider).
+1. Funcionamiento (Ej. Yaigo / Yummy)
+Empresas como Yaigo (You Ask I Go, de origen boliviano) o Yummy (plataforma venezolana
+con expansión en Bolivia) funcionan bajo el modelo de economía colaborativa:
+El usuario pide a través de la app.
+El sistema notifica al comercio (restaurante o tienda) para que prepare el pedido.
+El algoritmo busca al conductor disponible más cercano mediante geolocalización (GPS).
+El conductor acepta, recoge el pedido y lo lleva al domicilio del cliente, quien puede rastrear
+su ubicación en tiempo real.
+(Dato actual: En octubre de 2021, la super app Yummy adquirió las operaciones de Yaigo, por
+lo que hoy en día la tecnología y logística de Yaigo opera bajo el ecosistema de Yummy en
+Bolivia).
+2. Cálculo de pagos por entrega
+Los algoritmos de tarifas varían, pero generalmente la tarifa de envío que paga el cliente (y lo
+que gana el driver) se calcula combinando estas variables:
+● Distancia (Tarifa Base + Kilometraje): Existe un costo base por el recojo
+("drop/pickup") y un costo variable que se multiplica por los kilómetros de distancia
+entre el local y el cliente.
+● Demanda y Clima (Tarifa Dinámica/Surge Pricing): Si hay muchos pedidos y
+pocos conductores (hora pico, lluvia), la plataforma multiplica la tarifa base por un
+factor (ej. 1.5x) para incentivar a los conductores a conectarse.
+● Peso / Tamaño: Principalmente usado en el servicio de "Courier" (paquetería).
+Entregas voluminosas requieren conductores con vehículos (autos) en lugar de
+motocicletas, lo que incrementa el costo.
+● Frecuencia / Programas de suscripción: (Ej. Yummy Prime) donde clientes que
+pagan una suscripción tienen tarifa plana de 0 costo en el envío bajo ciertas reglas.
+d) PUDS (Proceso Unificado de Desarrollo de Software)
+El PUDS (o RUP - Rational Unified Process) es un marco de trabajo de desarrollo de
+software iterativo, incremental, centrado en la arquitectura y dirigido por casos de uso. Divide
+el ciclo de vida del software en 4 fases secuenciales:
+● Inicio (Incepción): Se define el alcance del proyecto, los riesgos y la viabilidad. Se
+identifican los casos de uso principales.
+
+===== PAGINA 16 =====
+15
+● Elaboración: Se diseña la arquitectura base del sistema, se capturan la mayoría de los
+requisitos y se mitigan los riesgos técnicos mayores (ej. probar la arquitectura base).
+● Construcción: Desarrollo intensivo. Se implementa el sistema en ciclos iterativos
+(sprints) construyendo el software componente por componente.
+● Transición: El software se entrega a los usuarios finales, se realizan pruebas beta,
+capacitaciones y despliegue final en producción.
+Paralelamente, a través de estas fases se ejecutan flujos de trabajo transversales: Captura de
+Requisitos, Análisis, Diseño, Implementación y Pruebas.
+e) UML (Lenguaje Unificado de Modelado)
+UML no es una metodología ni un lenguaje de programación, es un lenguaje visual estándar
+para especificar, construir, visualizar y documentar los artefactos de un sistema de software,
+especialmente orientado a objetos.
+En el marco del PUDS, UML es la herramienta gráfica indispensable:
+● Captura de Requisitos: Se documenta usando Diagramas de Casos de Uso.
+● Análisis y Diseño: Se utilizan Diagramas de Clases para el modelo de
+datos/entidades, Diagramas de Secuencia o Comunicación para ver cómo interactúan
+los objetos al ejecutar un caso de uso.
+● Arquitectura: Se modela con Diagramas de Componentes y Diagramas de
+Despliegue (para mostrar cómo se alojará Angular, Flutter, FastAPI y PostgreSQL en
+la nube).
+● Lógica de negocio: Se apoya en Diagramas de Actividades o Estados (muy útiles
+para modelar, por ejemplo, el ciclo de vida de una "Reserva" o de un pago en el
+carrito).
+PARTE II – PROCESO DE DESARROLLO
+Para el desarrollo de FashionStore se seguirá el Proceso Unificado de Desarrollo de Software
+(PUDS), modelando cada flujo de trabajo mediante UML 2.5+, conforme a los siguientes
+lineamientos:
+● a) Seguir los pasos descritos por el PUDS para el desarrollo de la aplicación:
+Captura de Requisitos, Análisis, Diseño, Implementación y Pruebas.
+● b) Generar los modelos pertinentes utilizando UML en cada flujo de trabajo.
+1. Flujo de Trabajo: Captura de Requisitos
+1.1. Identificación de Actores y Casos de Uso
+
+===== PAGINA 17 =====
+16
+Actores del sistema
+● Cliente: persona que navega el catálogo, consulta disponibilidad por sucursal,
+utiliza el vestidor virtual, reserva prendas y compra de forma presencial o digital.
+● Administrador: gestiona el negocio a nivel global: usuarios y roles,
+sucursales, catálogo, proveedores, promociones, inventario consolidado y
+reportes.
+● Encargado de Sucursal: gestiona la operación local: recibe y prepara reservas,
+confirma la llegada del cliente, gestiona disponibilidad y registra movimientos de
+inventario de su sucursal.
+● Cajero: atiende el punto de venta físico: consulta productos, registra ventas
+presenciales, procesa el pago en caja y emite comprobantes.
+● Proveedor: actor externo que suministra información de productos,
+disponibilidad y su asociación a temporadas y colecciones.
+● Sistema de Pagos: actor externo (pasarela de pago en modo sandbox) que
+procesa transacciones electrónicas, las confirma o rechaza, e informa su estado.
+● Servicio de Inteligencia Artificial: actor externo que analiza preferencias,
+recomienda productos y asiste al cliente mediante un asistente conversacional.
+Catálogo de Casos de Uso
+Código Caso de Uso Módulo Actor principal
+CU1 Registrarse Usuarios y Autenticación Cliente
+CU2 Iniciar sesión Usuarios y Autenticación Cliente / Admin. / Encargado /
+Cajero
+
+===== PAGINA 18 =====
+17
+CU3 Gestionar perfil Usuarios y Autenticación Cliente
+CU4 Gestionar usuarios y roles Usuarios y Autenticación Administrador
+CU5 Gestionar sucursales Sucursales y Ciudades Administrador
+CU6 Consultar sucursales por ciudad Sucursales y Ciudades Cliente / Administrador
+CU7 Gestionar productos (incluye categorías, Catálogo de Productos Administrador
+tallas y colores)
+CU8 Gestionar temporadas y colecciones Catálogo de Productos Administrador
+CU9 Gestionar proveedores Proveedores Administrador
+CU10 Consultar catálogo y buscar prendas Consulta de Catálogo y Cliente
+Disponibilidad
+CU11 Consultar disponibilidad por sucursal Consulta de Catálogo y Cliente
+Disponibilidad
+CU12 Usar vestidor virtual (AR) Vestidor Virtual (AR) Cliente
+CU13 Reservar prendas Reserva de Prendas Cliente
+CU14 Gestionar reserva (consultar / cancelar) Reserva de Prendas Cliente
+CU15 Atender reserva en sucursal Reserva de Prendas Encargado de Sucursal
+CU16 Gestionar carrito de compras Carrito y Compra Digital Cliente
+CU17 Confirmar compra digital (web / móvil) Carrito y Compra Digital Cliente
+CU18 Registrar venta presencial Compra Presencial y Punto de Cajero
+Venta
+CU19 Procesar pago electrónico (incluido en Pasarela de Pagos Electrónicos Sistema de Pagos
+CU17 / CU18)
+CU20 Actualizar inventario automáticamente Inventario y Movimientos Sistema
+CU21 Gestionar movimientos de inventario Inventario y Movimientos Encargado de Sucursal /
+(ingreso / existencias / agotados) Admin.
+CU22 Recomendar prendas (IA) IA — Recomendación y Servicio de IA
+Asistencia
+
+===== PAGINA 19 =====
+18
+CU23 Consultar asistente virtual (chatbot) IA — Recomendación y Cliente
+Asistencia
+CU24 Generar reporte por comando de voz IA — Recomendación y Administrador
+(extensión opcional) Asistencia
+CU25 Consultar reportes y dashboards Reportes y Dashboards Administrador
+CU26 Consultar historial de compras Reportes y Dashboards Cliente
+1.2. Priorización de Casos de Uso
+La priorización considera dos criterios: la prioridad de negocio (qué tan indispensable es el
+caso de uso para que la plataforma funcione como comercio electrónico viable) y el riesgo
+técnico (probabilidad de que su implementación consuma más tiempo del previsto o falle, por
+ejemplo por depender de APIs externas o del vestidor virtual). Ambos criterios determinan el
+ciclo de desarrollo al que se asigna cada caso de uso dentro de las 4 semanas del proyecto.
+Los 7 casos de uso básicos del Ciclo 1
+El criterio de este ciclo no es "lo más importante para el negocio" sino "lo más simple y sin
+integraciones externas": autenticación y CRUD directo sobre una sola entidad, sin lógica de
+disponibilidad, sin pasarela de pago y sin cámara/IA de por medio. El objetivo es levantar y
+validar la arquitectura base (Angular + Flutter + FastAPI + PostgreSQL desplegados y
+comunicándose entre sí) con el menor riesgo posible antes de sumar complejidad:
+● 1. CU1 Registrarse
+● 2. CU2 Iniciar sesión
+● 3. CU3 Gestionar perfil
+● 4. CU5 Gestionar sucursales
+● 5. CU6 Consultar sucursales por ciudad
+● 6. CU7 Gestionar productos
+● 7. CU10 Consultar catálogo y buscar prendas
+Resumen por ciclo
+
+===== PAGINA 20 =====
+19
+Ciclo Enfoque N.º de CU % del total
+C1 Base de la arquitectura: autenticación y CRUD simple de una sola entidad 7 27%
+(sucursales, productos, catálogo de solo lectura), sin integraciones externas ni
+lógica de negocio compleja.
+C2 Lógica de negocio intermedia: disponibilidad por sucursal, reservas, carrito, 9 35%
+usuarios/roles, temporadas/colecciones, proveedores y movimientos de
+inventario.
+C3 Mayor riesgo técnico e integraciones externas: compra digital y presencial 7 27%
+con pasarela de pago, actualización automática de inventario, vestidor virtual
+(AR) e IA (recomendación y asistente).
+C4 Analítica y extensiones: reportes, dashboards, historial de compras, asistente 3 12%
+de voz (opcional).
+Detalle de priorización
+Códig Caso de Uso Módulo Actor principal Prioridad Riesgo
+o
+CU1 Registrarse Usuarios y Cliente Alta Bajo
+Autenticación
+CU2 Iniciar sesión Usuarios y Cliente / Admin. / Alta Bajo
+Autenticación Encargado / Cajero
+CU3 Gestionar perfil Usuarios y Cliente Media Bajo
+Autenticación
+CU4 Gestionar usuarios y roles Usuarios y Administrador Media Medio
+Autenticación
+CU5 Gestionar sucursales Sucursales y Administrador Media Bajo
+Ciudades
+CU6 Consultar sucursales por Sucursales y Cliente / Media Bajo
+ciudad Ciudades Administrador
+
+===== PAGINA 21 =====
+20
+CU7 Gestionar productos (incluye Catálogo de Administrador Alta Bajo
+categorías, tallas y colores) Productos
+CU8 Gestionar temporadas y Catálogo de Administrador Media Bajo
+colecciones Productos
+CU9 Gestionar proveedores Proveedores Administrador Media Bajo
+CU10 Consultar catálogo y buscar Consulta de Cliente Alta Bajo
+prendas Catálogo y
+Disponibilidad
+CU11 Consultar disponibilidad por Consulta de Cliente Alta Medio
+sucursal Catálogo y
+Disponibilidad
+CU12 Usar vestidor virtual (AR) Vestidor Virtual Cliente Alta Alto
+(AR)
+CU13 Reservar prendas Reserva de Prendas Cliente Alta Medio
+CU14 Gestionar reserva (consultar / Reserva de Prendas Cliente Media Bajo
+cancelar)
+CU15 Atender reserva en sucursal Reserva de Prendas Encargado de Alta Medio
+Sucursal
+CU16 Gestionar carrito de compras Carrito y Compra Cliente Media Bajo
+Digital
+CU17 Confirmar compra digital Carrito y Compra Cliente Alta Medio
+(web / móvil) Digital
+CU18 Registrar venta presencial Compra Presencial Cajero Alta Medio
+y Punto de Venta
+CU19 Procesar pago electrónico Pasarela de Pagos Sistema de Pagos Alta Alto
+(incluido en CU17 / CU18) Electrónicos
+CU20 Actualizar inventario Inventario y Sistema Alta Alto
+automáticamente Movimientos
+
+===== PAGINA 22 =====
+21
+CU21 Gestionar movimientos de Inventario y Encargado de Media Bajo
+inventario (ingreso / Movimientos Sucursal / Admin.
+existencias / agotados)
+CU22 Recomendar prendas (IA) IA — Servicio de IA Alta Alto
+Recomendación y
+Asistencia
+CU23 Consultar asistente virtual IA — Cliente Media Medio
+(chatbot) Recomendación y
+Asistencia
+CU24 Generar reporte por comando IA — Administrador Baja Alto
+de voz (extensión opcional) Recomendación y
+Asistencia
+CU25 Consultar reportes y Reportes y Administrador Media Bajo
+dashboards Dashboards
+CU26 Consultar historial de Reportes y Cliente Media Bajo
+compras Dashboards
+1.3. Detallar Casos de Uso
+CICLO 1
+CU1. Registrarse
+Figura 1. Diagrama de Caso de Uso — CU1 Registrarse
+Nombre del CU Registrarse
+
+===== PAGINA 23 =====
+22
+Propósito Permitir que una persona cree una cuenta de cliente en la plataforma para poder
+navegar el catálogo, reservar prendas y comprar.
+Actores que Cliente
+participan
+Precondición Ninguna.
+Flujo de trabajo 1. El cliente accede a la opción "Registrarse".
+2. El sistema muestra el formulario de registro.
+3. El cliente ingresa sus datos personales (nombre, correo electrónico, teléfono,
+contraseña).
+4. El cliente confirma el registro.
+5. El sistema valida que los datos estén completos y sean correctos.
+6. El sistema verifica que el correo no esté registrado previamente.
+7. El sistema crea la cuenta del cliente.
+8. El sistema muestra un mensaje de registro exitoso.
+PostCondición El cliente queda registrado en la plataforma y puede iniciar sesión.
+Excepción Si faltan datos obligatorios, el sistema solicita completarlos. Si el correo ya está
+registrado, el sistema muestra un mensaje de duplicidad. Si ocurre un error
+interno, la cuenta no se crea.
+CU2. Iniciar sesión
+
+===== PAGINA 24 =====
+23
+Figura 2. Diagrama de Caso de Uso — CU2 Iniciar sesión
+Nombre del CU Iniciar sesión
+Propósito Permitir que cualquier usuario registrado acceda al sistema con las
+funcionalidades correspondientes a su rol.
+Actores que Cliente / Administrador / Encargado de Sucursal / Cajero
+participan
+Precondición El usuario debe estar registrado y su cuenta debe estar activa.
+Flujo de trabajo 1. El usuario accede a la pantalla de inicio de sesión.
+2. El sistema muestra el formulario de acceso.
+3. El usuario ingresa su correo electrónico y contraseña.
+4. El usuario confirma el inicio de sesión.
+5. El sistema valida las credenciales ingresadas.
+6. El sistema verifica que la cuenta exista y esté activa.
+7. El sistema identifica el rol del usuario y genera su sesión o token de acceso.
+8. El sistema redirige al usuario a la pantalla principal correspondiente a su rol.
+PostCondición El usuario queda autenticado y puede acceder a las funcionalidades permitidas
+según su rol.
+
+===== PAGINA 25 =====
+24
+Excepción Si el correo o la contraseña son incorrectos, el sistema muestra un mensaje de
+error. Si la cuenta está inactiva o bloqueada, el sistema impide el acceso.
+CU3. Gestionar perfil
+Figura 3. Diagrama de Caso de Uso — CU3 Gestionar perfil
+Nombre del CU Gestionar perfil
+Propósito Permitir que el cliente consulte y actualice su información personal dentro de la
+plataforma.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión.
+Flujo de trabajo 1. El cliente accede a la opción "Mi perfil".
+2. El sistema muestra la información actual del perfil.
+3. El cliente selecciona la opción "Editar perfil".
+4. El sistema habilita los campos editables.
+5. El cliente modifica los datos permitidos (nombre, teléfono, correo).
+6. El cliente guarda los cambios.
+7. El sistema valida la información ingresada.
+8. El sistema actualiza los datos del perfil y muestra un mensaje de
+confirmación.
+PostCondición El perfil del cliente queda actualizado y disponible para futuras operaciones.
+
+===== PAGINA 26 =====
+25
+Excepción Si el nuevo correo o teléfono ya pertenece a otra cuenta, el sistema muestra un
+mensaje de duplicidad. Si algún dato es inválido, el sistema solicita corregirlo.
+CU5. Gestionar sucursales
+Figura 4. Diagrama de Caso de Uso — CU5 Gestionar sucursales
+Nombre del CU Gestionar sucursales
+Propósito Permitir al administrador registrar, editar y desactivar las sucursales físicas de
+la cadena.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión.
+Flujo de trabajo 1. El administrador accede al módulo de sucursales.
+2. El sistema muestra la lista de sucursales registradas.
+3. El administrador selecciona registrar una nueva sucursal o editar/desactivar
+una existente.
+4. El sistema muestra el formulario correspondiente (nombre, ciudad, dirección,
+teléfono).
+5. El administrador ingresa o modifica los datos.
+6. El sistema valida la información ingresada.
+7. El sistema guarda los cambios y actualiza la lista de sucursales.
+
+===== PAGINA 27 =====
+26
+PostCondición La sucursal queda registrada o actualizada y disponible para el resto del sistema
+(catálogo, reservas, inventario).
+Excepción Si faltan datos obligatorios, el sistema solicita completarlos. Si ocurre un error
+del sistema, los cambios no se guardan.
+CU6. Consultar sucursales por ciudad
+Figura 5. Diagrama de Caso de Uso — CU6 Consultar sucursales por ciudad
+Nombre del CU Consultar sucursales por ciudad
+Propósito Permitir al cliente o al administrador visualizar las sucursales disponibles
+filtradas por ciudad.
+Actores que Cliente / Administrador
+participan
+Precondición Deben existir sucursales registradas en el sistema.
+Flujo de trabajo 1. El usuario accede a la opción "Sucursales".
+2. El sistema muestra un filtro por ciudad.
+3. El usuario selecciona una ciudad.
+4. El sistema consulta las sucursales registradas en esa ciudad.
+5. El sistema muestra la lista de sucursales con dirección y horario de atención.
+PostCondición El usuario visualiza las sucursales correspondientes a la ciudad seleccionada.
+
+===== PAGINA 28 =====
+27
+Excepción Si no existen sucursales en la ciudad seleccionada, el sistema muestra un
+mensaje informativo.
+CU7. Gestionar productos
+Figura 6. Diagrama de Caso de Uso — CU7 Gestionar productos
+Nombre del CU Gestionar productos
+Propósito Permitir al administrador registrar y editar los productos del catálogo,
+incluyendo su categoría, tallas y colores disponibles.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión.
+Flujo de trabajo 1. El administrador accede al módulo de productos.
+2. El sistema muestra el catálogo de productos registrados.
+3. El administrador selecciona registrar un nuevo producto o editar uno
+existente.
+4. El sistema muestra el formulario (nombre, categoría, precio, tallas, colores,
+imágenes).
+5. El administrador ingresa o modifica los datos del producto.
+6. El sistema valida la información ingresada.
+7. El sistema guarda el producto y lo publica en el catálogo.
+
+===== PAGINA 29 =====
+28
+PostCondición El producto queda registrado o actualizado y disponible para su consulta en el
+catálogo.
+Excepción Si faltan datos obligatorios (nombre, precio o categoría), el sistema solicita
+completarlos antes de guardar.
+CU10. Consultar catálogo y buscar prendas
+Figura 7. Diagrama de Caso de Uso — CU10 Consultar catálogo y buscar prendas
+Nombre del CU Consultar catálogo y buscar prendas
+Propósito Permitir al cliente explorar el catálogo de productos y buscar prendas
+específicas por nombre, categoría, talla, color o precio.
+Actores que Cliente
+participan
+Precondición Ninguna. La consulta del catálogo no requiere inicio de sesión; sí lo requieren
+la reserva y la compra.
+Flujo de trabajo 1. El cliente accede al catálogo de productos.
+2. El sistema muestra los productos disponibles.
+3. El cliente aplica filtros o ingresa un término de búsqueda (categoría, talla,
+color, precio).
+4. El sistema consulta la base de datos y muestra los resultados coincidentes.
+5. El cliente selecciona un producto para ver su detalle.
+
+===== PAGINA 30 =====
+29
+PostCondición El cliente visualiza el catálogo completo o los resultados filtrados de su
+búsqueda.
+Excepción Si no existen productos que coincidan con la búsqueda, el sistema muestra un
+mensaje informativo.
+CICLO 2
+CU4. GESTIONAR USUARIOS Y ROLES
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar usuarios y roles
+Propósito Permitir que el administrador registre, edite el rol y desactive cuentas de personal
+interno (administradores, encargados de sucursal) dentro de la plataforma.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión con permisos de administración.
+Flujo de trabajo 1. El administrador accede al módulo de usuarios.
+2. El sistema muestra la lista de usuarios internos registrados.
+3. El administrador selecciona “Nuevo usuario”, “Editar” o “Desactivar” sobre un
+usuario existente.
+4. Si registra un nuevo usuario, el sistema muestra el formulario y el administrador
+ingresa nombre, correo, teléfono, contraseña y rol.
+5. Si edita, el sistema muestra el formulario con los datos actuales, incluido el rol,
+para modificarlos.
+6. El sistema valida los datos ingresados.
+7. El sistema verifica que el correo no esté duplicado (en caso de registro).
+8. El sistema guarda los cambios (crea, actualiza o desactiva el usuario según la
+acción).
+9. El sistema muestra un mensaje de confirmación.
+PostCondición El usuario interno queda registrado, actualizado o desactivado según la acción
+realizada, con el rol correspondiente disponible para el control de acceso.
+
+===== PAGINA 31 =====
+30
+Excepción Si el correo ya está registrado, el sistema rechaza el registro. Si faltan datos
+obligatorios, se solicita completarlos. Si el usuario a desactivar no existe, el sistema
+bloquea la acción.
+CU8. GESTIONAR TEMPORADAS Y COLECCIONES
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar temporadas y colecciones
+Propósito Permitir que el administrador registre y edite las temporadas o colecciones a las
+que pertenecen los productos del catálogo.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión.
+Flujo de trabajo 1. El administrador accede al módulo de temporadas.
+2. El sistema muestra la lista de temporadas registradas.
+3. El administrador selecciona “Nueva temporada” o “Editar” sobre una existente.
+4. El sistema muestra el formulario correspondiente.
+5. El administrador ingresa o modifica nombre, año, descripción y fechas de
+vigencia.
+6. El sistema valida los datos ingresados.
+7. El sistema guarda la temporada.
+8. El sistema muestra un mensaje de confirmación.
+PostCondición La temporada queda registrada o actualizada y disponible para asociarse a
+productos del catálogo.
+Excepción Si faltan datos obligatorios, el sistema solicita completarlos. Si ocurre un error del
+sistema, los cambios no se guardan.
+CU9. GESTIONAR PROVEEDORES
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar proveedores
+
+===== PAGINA 32 =====
+31
+Propósito Permitir que el administrador registre, edite y desactive los proveedores que
+suministran los productos de la tienda.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión.
+Flujo de trabajo 1. El administrador accede al módulo de proveedores.
+2. El sistema muestra la lista de proveedores registrados.
+3. El administrador selecciona “Nuevo proveedor”, “Editar” o “Desactivar”.
+4. El sistema muestra el formulario correspondiente.
+5. El administrador ingresa o modifica razón social, NIT, teléfono, correo y dirección.
+6. El sistema valida los datos.
+7. El sistema guarda los cambios.
+8. El sistema muestra un mensaje de confirmación.
+PostCondición El proveedor queda registrado, actualizado o desactivado.
+Excepción Si el NIT ya está registrado, el sistema rechaza el registro por duplicidad. Si faltan
+datos obligatorios, se solicita completarlos.
+CU11. CONSULTAR DISPONIBILIDAD POR SUCURSAL
+CAMPO DESCRIPCIÓN
+Nombre del CU Consultar disponibilidad por sucursal
+Propósito Permitir que el cliente consulte la disponibilidad real de una prenda (talla y color) en
+las distintas sucursales antes de reservarla o comprarla.
+Actores que Cliente
+participan
+Precondición Debe existir el producto en el catálogo.
+Flujo de trabajo 1. El cliente accede al detalle de un producto.
+2. El cliente selecciona la talla y el color deseados.
+3. El cliente selecciona “Ver disponibilidad por sucursal”.
+4. El sistema consulta el inventario del producto en todas las sucursales.
+5. El sistema muestra la cantidad disponible por sucursal.
+PostCondición El cliente conoce en qué sucursales hay stock disponible del producto
+seleccionado.
+Excepción Si no hay stock en ninguna sucursal, el sistema muestra un mensaje informativo.
+CU13. RESERVAR PRENDAS
+
+===== PAGINA 33 =====
+32
+CAMPO DESCRIPCIÓN
+Nombre del CU Reservar prendas
+Propósito Permitir que el cliente reserve una prenda disponible en una sucursal específica
+para retirarla en persona.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión y debe existir disponibilidad del producto en la
+sucursal seleccionada.
+Flujo de trabajo 1. El cliente accede al detalle de un producto con disponibilidad confirmada.
+2. El cliente selecciona sucursal, talla, color y cantidad.
+3. El cliente confirma la reserva.
+4. El sistema verifica nuevamente la disponibilidad.
+5. El sistema registra la reserva y genera un código de retiro.
+6. El sistema muestra la confirmación de la reserva con el código y el plazo de
+retiro.
+PostCondición La reserva queda registrada en estado “Pendiente”, con un plazo definido para su
+retiro en sucursal.
+Excepción Si el stock ya no está disponible al momento de confirmar, el sistema rechaza la
+reserva e informa al cliente.
+CU14. GESTIONAR RESERVA (CONSULTAR / CANCELAR)
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar reserva (consultar / cancelar)
+Propósito Permitir que el cliente consulte el estado de sus reservas activas y cancele una
+reserva pendiente si ya no la necesita.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión y contar con al menos una reserva registrada.
+
+===== PAGINA 34 =====
+33
+Flujo de trabajo 1. El cliente accede a “Mis reservas”.
+2. El sistema muestra la lista de reservas del cliente con su estado.
+3. El cliente selecciona una reserva pendiente y elige “Cancelar”.
+4. El sistema solicita confirmación.
+5. El cliente confirma la cancelación.
+6. El sistema valida que la reserva esté en estado pendiente.
+7. El sistema actualiza el estado de la reserva a “Cancelada”.
+8. El sistema muestra un mensaje de confirmación.
+PostCondición La reserva queda cancelada y el cliente puede consultar el historial actualizado.
+Excepción Si la reserva ya fue atendida o venció, el sistema no permite cancelarla.
+CU15. ATENDER RESERVA EN SUCURSAL
+CAMPO DESCRIPCIÓN
+Nombre del CU Atender reserva en sucursal
+Propósito Permitir que el encargado de sucursal localice una reserva mediante su código y la
+marque como atendida al momento de la entrega física de la prenda.
+Actores que Encargado de Sucursal
+participan
+Precondición Debe existir una reserva vigente asociada a la sucursal.
+Flujo de trabajo 1. El encargado accede al panel de atención de reservas.
+2. El encargado ingresa el código de retiro proporcionado por el cliente.
+3. El sistema busca la reserva y valida que esté vigente.
+4. El sistema muestra los datos de la reserva (producto, talla, color, cliente).
+5. El encargado confirma la entrega de la prenda.
+6. El sistema actualiza el estado de la reserva a “Atendida”.
+7. El sistema muestra la confirmación al encargado.
+PostCondición La reserva queda marcada como atendida y disponible en el historial del cliente.
+Excepción Si el código no corresponde a ninguna reserva o la reserva ya venció, el sistema
+muestra un mensaje de error.
+CU16. GESTIONAR CARRITO DE COMPRAS
+
+===== PAGINA 35 =====
+34
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar carrito de compras
+Propósito Permitir que el cliente agregue, modifique la cantidad o quite prendas de su carrito
+de compras antes de finalizar una compra digital.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión.
+Flujo de trabajo 1. El cliente accede al detalle de un producto y selecciona talla, color y cantidad.
+2. El cliente selecciona “Agregar al carrito”.
+3. El sistema valida la cantidad ingresada.
+4. El sistema agrega el ítem al carrito y muestra el carrito actualizado.
+5. El cliente puede acceder al carrito para modificar la cantidad de un ítem o
+eliminarlo.
+6. El sistema valida y aplica los cambios, mostrando el carrito actualizado.
+PostCondición El carrito del cliente refleja los productos, tallas, colores y cantidades
+seleccionadas, listo para iniciar el proceso de compra (Ciclo 3).
+Excepción Si la cantidad ingresada es inválida o excede el stock disponible, el sistema solicita
+corregirla.
+CU21. GESTIONAR MOVIMIENTOS DE INVENTARIO
+CAMPO DESCRIPCIÓN
+Nombre del CU Gestionar movimientos de inventario
+Propósito Permitir que el encargado de sucursal o el administrador registren movimientos de
+inventario (ingresos, mermas) y consulten las existencias y productos agotados por
+sucursal.
+
+===== PAGINA 36 =====
+35
+Actores que Encargado de Sucursal / Administrador
+participan
+Precondición El usuario debe haber iniciado sesión con permisos sobre la sucursal
+correspondiente.
+Flujo de trabajo 1. El usuario accede al módulo de inventario.
+2. El usuario selecciona “Registrar movimiento” o “Consultar existencias”.
+3. Si registra un movimiento, ingresa producto, tipo de movimiento (ingreso o
+merma) y cantidad.
+4. El sistema valida que la cantidad sea válida.
+5. El sistema registra el movimiento y actualiza el stock disponible.
+6. Si consulta existencias, el sistema muestra la cantidad disponible y los productos
+agotados por sucursal.
+7. El sistema muestra el resultado correspondiente al usuario.
+PostCondición El inventario de la sucursal queda actualizado, o el usuario cuenta con la
+información de existencias solicitada.
+Excepción Si la cantidad ingresada es inválida (negativa o cero para un ingreso), el sistema
+rechaza el movimiento.
+CICLO 3
+CU12. USAR VESTIDOR VIRTUAL (AR)
+CAMPO DESCRIPCIÓN
+Nombre del CU Usar vestidor virtual (AR)
+Propósito Permitir que el cliente visualice cómo le queda una prenda mediante realidad aumentada,
+superponiendo el modelo de la prenda sobre la imagen capturada por la cámara del
+dispositivo, antes de decidir reservarla o comprarla.
+Actores que Cliente
+participan
+Precondición El cliente debe tener permisos de cámara habilitados en la aplicación móvil y debe existir un
+modelo visual de la prenda seleccionada.
+
+===== PAGINA 37 =====
+36
+Flujo de trabajo 1. El cliente accede al detalle de un producto.
+2. El cliente selecciona “Probar en vestidor virtual”.
+3. El sistema activa la cámara del dispositivo.
+4. El sistema superpone el modelo de la prenda sobre la imagen en tiempo real.
+5. El cliente puede rotar o ajustar la posición para visualizar la prenda desde distintos
+ángulos.
+6. El cliente cierra la sesión de AR o continúa hacia la reserva o el carrito.
+PostCondición El cliente visualiza la prenda superpuesta en tiempo real sin necesidad de probársela
+físicamente.
+Excepción Si el dispositivo no cuenta con cámara compatible o el cliente no otorga permisos, el sistema
+muestra un mensaje informativo y no activa el vestidor virtual. Si el procesamiento de la
+imagen falla, el sistema interrumpe la sesión de AR.
+CU17. CONFIRMAR COMPRA DIGITAL
+CAMPO DESCRIPCIÓN
+Nombre del CU Confirmar compra digital
+Propósito Permitir que el cliente finalice la compra de los productos de su carrito, indicando dirección
+de envío y confirmando el pago, para completar una compra 100% digital.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión y tener al menos un producto en el carrito con
+disponibilidad confirmada.
+
+===== PAGINA 38 =====
+37
+Flujo de trabajo 1. El cliente accede al carrito y selecciona “Proceder al pago”.
+2. El sistema muestra el resumen de la compra y solicita la dirección de envío.
+3. El cliente confirma la dirección y selecciona el método de pago.
+4. El cliente confirma la compra.
+5. El sistema valida nuevamente la disponibilidad del stock.
+6. El sistema registra el pedido en estado “Pendiente”.
+7. El sistema procesa el pago electrónico (ver CU19, incluido en este caso de uso).
+8. El sistema actualiza el estado del pedido según el resultado del pago.
+9. El sistema muestra la confirmación del pedido al cliente.
+PostCondición El pedido queda registrado con su detalle, y si el pago fue exitoso, queda en estado “Pagado”
+y disponible para su preparación y envío.
+Excepción Si el stock ya no está disponible, el sistema cancela la operación antes de procesar el pago.
+Si el pago es rechazado, el pedido queda en estado “Pendiente” o “Cancelado” según
+corresponda, y se notifica al cliente.
+CU18. REGISTRAR VENTA PRESENCIAL
+CAMPO DESCRIPCIÓN
+Nombre del CU Registrar venta presencial
+Propósito Permitir que el cajero registre una venta realizada físicamente en la sucursal, incluyendo el
+cobro correspondiente, ya sea en efectivo o con tarjeta.
+Actores que Cajero
+participan
+Precondición El cajero debe haber iniciado sesión y debe existir stock disponible de los productos a
+vender en la sucursal.
+
+===== PAGINA 39 =====
+38
+Flujo de trabajo 1. El cajero accede al punto de venta y selecciona los productos, tallas, colores y cantidades.
+2. El sistema calcula el monto total de la venta.
+3. El cajero selecciona el método de pago (efectivo o tarjeta).
+4. Si el método es tarjeta, el sistema procesa el pago electrónico (ver CU19, incluido
+condicionalmente en este caso de uso).
+5. El cajero confirma la venta.
+6. El sistema valida la disponibilidad de stock.
+7. El sistema registra la venta como un pedido de tipo “Presencial”.
+8. El sistema descuenta el stock de la sucursal.
+9. El sistema genera un comprobante de venta.
+PostCondición La venta queda registrada, el stock de la sucursal actualizado y el comprobante disponible
+para el cliente.
+Excepción Si el stock no es suficiente, el sistema no permite completar la venta. Si el pago con tarjeta
+es rechazado, el sistema permite seleccionar otro método de pago o cancelar la venta.
+CU19. PROCESAR PAGO ELECTRÓNICO
+CAMPO DESCRIPCIÓN
+Nombre del CU Procesar pago electrónico
+Propósito Permitir que el sistema envíe la solicitud de cobro a la pasarela de pagos electrónicos
+(Stripe) y registre el resultado de la transacción, ya sea en una compra digital (CU17) o en
+una venta presencial pagada con tarjeta (CU18).
+
+===== PAGINA 40 =====
+39
+Actores que Sistema de Pagos. Este caso de uso está incluido en CU17 y CU18: no lo dispara
+participan directamente un actor humano, sino el flujo de esos dos casos de uso al momento de cobrar.
+Precondición Debe existir un pedido o venta con un monto definido y un método de pago electrónico
+seleccionado.
+Flujo de trabajo 1. El sistema recibe la solicitud de pago desde CU17 o CU18, con el monto y los datos de la
+transacción.
+2. El sistema envía la solicitud a la pasarela de pagos electrónicos.
+3. La pasarela procesa la transacción y responde con el resultado.
+4. El sistema valida la respuesta recibida.
+5. El sistema registra el pago con su estado (completado o fallido) y la referencia de la
+transacción.
+6. El sistema notifica el resultado al caso de uso que lo invocó (CU17 o CU18).
+PostCondición El pago queda registrado con su estado final, vinculado al pedido o venta correspondiente.
+Excepción Si la pasarela no responde o rechaza la transacción, el sistema registra el pago como fallido y
+notifica al caso de uso que lo invocó para que gestione la situación con el cliente.
+CU20. ACTUALIZAR INVENTARIO AUTOMÁTICAMENTE
+CAMPO DESCRIPCIÓN
+Nombre del CU Actualizar inventario automáticamente
+Propósito Permitir que el sistema descuente automáticamente el stock disponible de un producto en la
+sucursal correspondiente cada vez que se confirma una venta digital o presencial, evitando
+que se vendan más unidades de las disponibles.
+
+===== PAGINA 41 =====
+40
+Actores que Sistema. Se activa automáticamente al confirmarse una venta (CU17 o CU18); no lo dispara
+participan un actor humano.
+Precondición Debe haberse confirmado una venta (CU17 o CU18) con productos, tallas, colores y
+cantidades definidas.
+Flujo de trabajo 1. El sistema detecta la confirmación de una venta.
+2. El sistema identifica los productos, tallas, colores, cantidades y la sucursal involucrada.
+3. El sistema descuenta la cantidad vendida del inventario correspondiente.
+4. El sistema verifica si el producto queda agotado en esa sucursal.
+5. El sistema actualiza el estado de disponibilidad del producto si corresponde.
+PostCondición El inventario queda actualizado y refleja las existencias reales disponibles para nuevas
+reservas o ventas.
+Excepción Si el descuento de stock generaría una cantidad negativa (por ejemplo, por dos ventas
+simultáneas del mismo producto), el sistema rechaza la actualización y marca la venta para
+revisión.
+CU22. RECOMENDAR PRENDAS (IA)
+CAMPO DESCRIPCIÓN
+Nombre del CU Recomendar prendas (IA)
+Propósito Permitir que el sistema, apoyado en un servicio de inteligencia artificial, sugiera al cliente
+prendas relevantes según su historial de navegación y compras, para mejorar su experiencia
+dentro del catálogo.
+Actores que Servicio de IA. Participa activamente generando las sugerencias; el cliente es quien recibe
+participan las recomendaciones al navegar el catálogo.
+
+===== PAGINA 42 =====
+41
+Precondición El cliente debe haber iniciado sesión y contar con historial de navegación o compras previas.
+Flujo de trabajo 1. El cliente accede al catálogo o al detalle de un producto.
+2. El sistema solicita al servicio de IA un análisis de las preferencias del cliente.
+3. El servicio de IA analiza el historial de navegación, compras y datos del catálogo.
+4. El servicio de IA devuelve una lista de productos sugeridos.
+5. El sistema consulta los datos completos de los productos sugeridos.
+6. El sistema muestra las recomendaciones al cliente dentro del catálogo.
+PostCondición El cliente visualiza una sección de prendas recomendadas relevante a sus preferencias.
+Excepción Si el servicio de IA no responde o no hay suficiente historial del cliente, el sistema muestra
+una sección de productos destacados genérica en su lugar.
+CU23. CONSULTAR ASISTENTE VIRTUAL (CHATBOT)
+CAMPO DESCRIPCIÓN
+Nombre del CU Consultar asistente virtual (chatbot)
+Propósito Permitir que el cliente resuelva dudas sobre productos, tallas, disponibilidad o el estado de
+sus pedidos mediante un asistente virtual conversacional basado en inteligencia artificial.
+Actores que Cliente
+participan
+Precondición El cliente debe tener acceso a la aplicación móvil o el sitio web.
+Flujo de trabajo 1. El cliente abre el asistente virtual y escribe su pregunta.
+2. El sistema envía la pregunta junto con el contexto disponible al servicio de IA.
+3. El servicio de IA genera una respuesta.
+4. El sistema registra la conversación.
+
+===== PAGINA 43 =====
+42
+5. El sistema muestra la respuesta al cliente.
+PostCondición El cliente recibe una respuesta a su consulta y puede continuar la conversación si lo requiere.
+Excepción Si el servicio de IA no responde o no logra interpretar la pregunta, el sistema muestra un
+mensaje indicando que no pudo procesar la consulta y sugiere contactar a soporte.
+CICLO 4
+CU24. GENERAR REPORTE POR COMANDO DE VOZ
+CAMPO DESCRIPCIÓN
+Nombre del CU Generar reporte por comando de voz
+Propósito Permitir que el administrador solicite un reporte operativo mediante un comando de
+voz, para consultar información de ventas o inventario sin necesidad de navegar
+manualmente por el dashboard.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión y el dispositivo debe contar con
+micrófono habilitado.
+Flujo de trabajo 1. El administrador selecciona la opción de reporte por voz.
+2. El administrador graba el comando de voz indicando el reporte deseado.
+3. El sistema envía el audio a interpretar al servicio de voz.
+4. El servicio de voz identifica la intención y los parámetros del reporte solicitado.
+5. El sistema genera el reporte correspondiente a partir de los datos de ventas o
+inventario.
+6. El sistema muestra el reporte generado al administrador.
+PostCondición El administrador obtiene el reporte solicitado sin necesidad de navegar
+manualmente por el dashboard.
+Excepción Si el sistema no logra interpretar el comando de voz, muestra un mensaje de error y
+sugiere repetir la solicitud o usar el dashboard convencional (CU25). Al ser una
+extensión opcional de prioridad baja y riesgo alto, puede quedar fuera del alcance
+implementado si el tiempo del proyecto se ajusta.
+
+===== PAGINA 44 =====
+43
+CU25. CONSULTAR REPORTES Y DASHBOARDS
+CAMPO DESCRIPCIÓN
+Nombre del CU Consultar reportes y dashboards
+Propósito Permitir que el administrador visualice indicadores operativos (ventas, inventario,
+reservas) mediante un dashboard, para apoyar la toma de decisiones.
+Actores que Administrador
+participan
+Precondición El administrador debe haber iniciado sesión y debe existir información registrada en
+el sistema.
+Flujo de trabajo 1. El administrador accede al módulo de reportes y dashboards.
+2. El administrador selecciona los filtros deseados (periodo, sucursal, categoría).
+3. El sistema calcula los indicadores correspondientes a partir de los datos de
+pedidos, inventario y reservas.
+4. El sistema muestra el dashboard con los indicadores solicitados.
+PostCondición El administrador visualiza los indicadores operativos actualizados según los filtros
+aplicados.
+Excepción Si no existen datos suficientes para el periodo o filtro seleccionado, el sistema
+muestra un mensaje informativo en lugar del gráfico correspondiente.
+CU26. CONSULTAR HISTORIAL DE COMPRAS
+CAMPO DESCRIPCIÓN
+Nombre del CU Consultar historial de compras
+Propósito Permitir que el cliente consulte el historial de sus compras anteriores, tanto digitales
+como presenciales, incluyendo el detalle de productos y montos.
+Actores que Cliente
+participan
+Precondición El cliente debe haber iniciado sesión y contar con al menos una compra registrada.
+
+===== PAGINA 45 =====
+44
+Flujo de trabajo 1. El cliente accede a la opción “Historial de compras”.
+2. El sistema consulta los pedidos asociados al cliente.
+3. El sistema muestra la lista de compras con fecha, tipo (digital o presencial) y
+monto total.
+4. El cliente selecciona una compra para ver el detalle de productos.
+5. El sistema muestra el detalle de la compra seleccionada.
+PostCondición El cliente visualiza su historial de compras y el detalle de cada una.
+Excepción Si el cliente no tiene compras registradas, el sistema muestra un mensaje
+informativo.
+1.4 Prototipo
+CICLO#1
+CU1 Registrarse
+CU2 Iniciar sesión
+
+===== PAGINA 46 =====
+45
+CU3 Gestionar perfil
+CU5 Gestionar sucursales
+
+===== PAGINA 47 =====
+46
+CU6 Consultar sucursales por ciudad
+CU7 Gestionar productos
+
+===== PAGINA 48 =====
+47
+CU10 Consultar catálogo y buscar prendas
+CICLO#2
+CU4. Gestionar usuarios y roles
+
+===== PAGINA 49 =====
+48
+CU8. Gestionar temporadas y colecciones
+CU9. Gestionar proveedores
+CU11. Consultar disponibilidad por sucursal
+
+===== PAGINA 50 =====
+49
+CU13. Reservar prendas
+CU14. Gestionar reserva (consultar / cancelar)
+
+===== PAGINA 51 =====
+50
+CU15. Atender reserva en sucursal
+CU16. Gestionar carrito de compras
+
+===== PAGINA 52 =====
+51
+CU21. Gestionar movimientos de inventario
+CICLO #3
+CU12 — Usar vestidor virtual (AR)
+CU17 — Confirmar compra digital
+CU18 — Registrar venta presencial
+CU19 — Procesar pago electrónico
+CU20 — Actualizar inventario automáticamente
+CU22 — Recomendar prendas (IA)
+CU23 — Consultar asistente virtual (chatbot)
+CICLO #4
+CU24 — Generar reporte por comando de voz (extensión opcional, prioridad baja)
+CU25 — Consultar reportes y dashboards
+CU26 — Consultar historial de compras
+1.5. Estructurar el Modelo de Caso de Uso
+
+===== PAGINA 53 =====
+52
+CICLO 1
+2. Flujo de Trabajo: Análisis
+2.1. Identificar paquetes
+2.1.1. Identificar paquetes
+Paquete Gestión de Identidad y Acceso
+
+===== PAGINA 54 =====
+53
+Paquete Descripción de los Escenarios Resumen
+Gestión de Centraliza las operaciones relacionadas con Garantiza que solo usuarios
+Identidad y la identidad de todos los actores del sistema: válidos accedan a la plataforma y
+Acceso (paquete clientes y personal interno. Integra registro, que cada rol tenga los privilegios
+principal) autenticación, gestión de perfil y correctos.
+administración de roles.
+Autenticación Registro de nuevas cuentas de cliente, Asegura que solo usuarios
+(subpaquete) verificación de credenciales e inicio de registrados y activos puedan
+sesión, con generación de sesión según el rol ingresar al sistema.
+del usuario.
+Perfil y Roles Consulta y actualización del perfil personal Mantiene actualizada la
+(subpaquete) del cliente, y administración de usuarios información de cada usuario y
+internos y sus roles por parte del controla qué puede hacer cada rol.
+administrador.
+Paquete Gestión de Catálogo y Sucursales
+Paquete Descripción de los Escenarios Resumen
+
+===== PAGINA 55 =====
+54
+Gestión de Administra el catálogo de productos, sus Es la base de información
+Catálogo y proveedores, y la red de sucursales físicas comercial y geográfica que
+Sucursales de la cadena, junto con la consulta pública de sostiene toda la operación de
+(paquete ambos por parte del cliente. venta.
+principal)
+Catálogo Base Registro y mantenimiento de productos, Mantiene actualizado qué se
+(subpaquete) categorías, tallas, colores, temporadas, vende y quién lo suministra.
+colecciones y proveedores.
+Sucursales y Registro de sucursales y ciudades, y consulta Conecta al cliente con la ubicación
+Disponibilidad pública del catálogo y su disponibilidad real física y la existencia real de cada
+(subpaquete) por sucursal. prenda.
+Paquete Gestión de Operaciones de Compra
+Paquete Descripción de los Escenarios Resumen
+Gestión de Orquesta el recorrido del cliente desde que Es el núcleo transaccional de la
+Operaciones de prueba una prenda (física o virtualmente) plataforma, donde se concreta la
+Compra (paquete hasta que confirma su compra, por venta.
+principal) cualquiera de los dos canales.
+Reserva y Prueba Vestidor virtual por realidad aumentada, Reduce la incertidumbre del cliente
+(subpaquete) reserva de prendas para probarlas en antes de comprar.
+sucursal, y atención de esa reserva por parte
+del encargado.
+Checkout Carrito de compras, confirmación de compra Cierra el ciclo de venta, sin
+(subpaquete) digital y registro de venta presencial en caja. importar el canal elegido por el
+cliente.
+Paquete Pagos e Inventario
+
+===== PAGINA 56 =====
+55
+Paquete Descripción de los Escenarios Resumen
+Pagos e Procesa las transacciones electrónicas y Garantiza que cada venta se cobre
+Inventario mantiene sincronizado el inventario de correctamente y que el stock
+(paquete productos entre todas las sucursales. mostrado al cliente sea siempre
+principal) real.
+Pasarela Procesamiento de pagos electrónicos Habilita el cobro digital de forma
+Transaccional mediante pasarela en modo sandbox, segura, sin exponer datos de
+(subpaquete) confirmación o rechazo de la transacción. tarjeta al comercio.
+Control de Actualización automática del inventario tras Mantiene el stock exacto por
+Inventario reservas o ventas, y registro manual de producto y sucursal en todo
+(subpaquete) movimientos (ingresos, mermas). momento.
+Paquete Inteligencia y Analítica
+Paquete Descripción de los Escenarios Resumen
+Inteligencia y Aplica inteligencia artificial para asistir al Aporta valor añadido sobre los
+Analítica cliente en su elección de productos, y datos que genera el resto del
+(paquete consolida indicadores operativos para la sistema, sin operar directamente el
+principal) administración. negocio.
+
+===== PAGINA 57 =====
+56
+IA de Análisis de preferencias del cliente, Personaliza la experiencia de
+Recomendación recomendación de prendas y asistente compra del cliente.
+(subpaquete) conversacional; de forma extendida,
+generación de reportes por comando de voz.
+Reportes Consulta de reportes de ventas e inventario, Da visibilidad a la administración
+Operativos indicadores por sucursal y ciudad, e historial sobre el desempeño real del
+(subpaquete) de compras del cliente. negocio.
+2.1.2. Relacionar paquetes y casos de uso
+Relación de casos de uso Gestión de Identidad y Acceso
+
+===== PAGINA 58 =====
+57
+Relación de casos de uso Gestión de Catálogo y Sucursales
+Relación de casos de uso Gestión de Operaciones de Compra
+
+===== PAGINA 59 =====
+58
+Relación de casos de uso Pagos e Inventario
+Relación de casos de uso Inteligencia y Analítica
+2.1.3. Vista de paquetes
+
+===== PAGINA 60 =====
+59
+Vista de paquete Gestión de Identidad y Acceso
+Vista de paquete Gestión de Catálogo y Sucursales
+
+===== PAGINA 61 =====
+60
+Vista de paquete Gestión de Operaciones de Compra
+Vista de paquete Pagos e Inventario
+
+===== PAGINA 62 =====
+61
+Vista de paquete Inteligencia y Analítica
+2.2. Diagrama de Comunicación
+Ciclo #1
+Se presenta, para cada caso de uso del Ciclo 1, el diagrama de comunicación entre el actor, la
+vista (boundary), el controller y el modelo (entity), con la numeración de mensajes
+correspondiente al orden real de ejecución. A diferencia del ejemplo de referencia, no se
+fuerza que todo caso de uso combine crear/editar/eliminar en un mismo diagrama: solo CU5
+y CU7 son operaciones CRUD genuinas en este ciclo; el resto son flujos de un solo paso, y
+representarlos como CRUD habría sido inventar pasos que no están en la tabla Detalle de la
+sección 1.3.
+CU1. Registrarse
+
+===== PAGINA 63 =====
+62
+Diagrama de Comunicación — CU1 Registrarse
+Flujo simple de un solo paso: no se combina con edición ni eliminación porque el registro de
+cliente es una operación independiente y distinta del CRUD administrativo de CU4
+(Gestionar usuarios y roles, Ciclo 2).
+CU2. Iniciar sesión
+Diagrama de Comunicación — CU2 Iniciar sesión
+El actor combina Cliente y Personal Interno porque comparten el mismo boundary y
+controller de autenticación (ver generalización de la sección 1.5).
+CU3. Gestionar perfil
+
+===== PAGINA 64 =====
+63
+Diagrama de Comunicación — CU3 Gestionar perfil
+Flujo simple: en este ciclo el cliente solo edita su propio perfil, sin eliminar ni crear otros
+usuarios.
+CU5. Gestionar sucursales
+Diagrama de Comunicación — CU5 Gestionar sucursales
+Único CRUD real de tres operaciones paralelas del Ciclo 1 (crear, actualizar, desactivar), de
+ahí que combine tres numeraciones (1/2/3) como en el patrón de la guía.
+CU6. Consultar sucursales por ciudad
+Diagrama de Comunicación — CU6 Consultar sucursales por ciudad
+Flujo de solo lectura: se omite el loop de validación porque no hay datos que validar antes de
+consultar, solo un filtro de búsqueda.
+CU7. Gestionar productos
+
+===== PAGINA 65 =====
+64
+Diagrama de Comunicación — CU7 Gestionar productos
+CRUD de dos operaciones (crear, actualizar); no incluye eliminar porque el enunciado no lo
+pide para este ciclo — los productos se desactivan, no se borran, y esa operación aún no está
+definida en el alcance del Ciclo 1.
+CU10. Consultar catálogo y buscar prendas
+Diagrama de Comunicación — CU10 Consultar catálogo y buscar prendas
+CICLO #2
+CU4. Gestionar usuarios y roles
+
+===== PAGINA 66 =====
+65
+Diagrama de Comunicación — CU4 Gestionar usuarios y roles
+Único CRUD real de tres operaciones paralelas del Ciclo 2 sobre la misma entidad Usuario ya
+usada en CU1/CU2/CU3 (crear personal interno, editar datos y rol, desactivar), de ahí que
+combine tres numeraciones (1/2/3) como en el patrón de CU5 del Ciclo 1. La asignación de rol
+se incluye dentro de la edición, no como operación aparte, porque el enunciado la describe
+como parte de “gestionar usuarios y roles” y no como un caso de uso independiente.
+CU8. Gestionar temporadas y colecciones
+Diagrama de Comunicación — CU8 Gestionar temporadas y colecciones
+CRUD de dos operaciones (crear, actualizar), igual criterio que CU7 en el Ciclo 1: no incluye
+eliminar porque el subpaquete Catálogo Base no define baja física de temporadas o
+colecciones, solo su desactivación, y esa operación todavía no está detallada en el alcance de
+este ciclo.
+CU9. Gestionar proveedores
+
+===== PAGINA 67 =====
+66
+Diagrama de Comunicación — CU9 Gestionar proveedores
+CRUD de tres operaciones (crear, editar, desactivar), igual criterio que CU5 en el Ciclo 1: un
+proveedor se desactiva y no se elimina, para conservar la trazabilidad de los productos que ya le
+fueron asociados en el Catálogo Base.
+CU11. Consultar disponibilidad por sucursal
+Diagrama de Comunicación — CU11 Consultar disponibilidad por sucursal
+Flujo de solo lectura, igual criterio que CU6 en el Ciclo 1: se omite el loop de validación porque
+no hay datos que validar antes de consultar. El modelo usado es modeloInventario y no una
+clase propia del subpaquete Sucursales y Disponibilidad, porque la existencia real de una
+prenda por sucursal es la misma información que administrará CU21 (Control de Inventario);
+este caso de uso solo la lee.
+CU13. Reservar prendas
+
+===== PAGINA 68 =====
+67
+Diagrama de Comunicación — CU13 Reservar prendas
+Flujo simple de un solo paso, con la verificación de disponibilidad modelada como una operación
+interna del controller (self-loop) y no como una segunda clase modelo: en este ciclo no se crea
+una clase Inventario propia para reservas, ya que el movimiento real de stock es responsabilidad
+del paquete Pagos e Inventario y se detallará en CU20/CU21 (Ciclo 3 y Ciclo 2,
+respectivamente).
+CU14. Gestionar reserva (consultar / cancelar)
+Diagrama de Comunicación — CU14 Gestionar reserva (consultar / cancelar)
+Combina dos numeraciones (1/2) sobre el mismo par reservaController / modeloReserva ya
+definido en CU13, porque ambos casos de uso operan sobre la misma entidad Reserva y sería
+redundante modelar un controller distinto. La consulta (flujo 1) no requiere validación; la
+cancelación (flujo 2) sí la requeriría en el detalle de la sección 1.3 (solo se puede cancelar una
+reserva pendiente), pero se omite aquí el self-loop por simplicidad visual del diagrama de
+comunicación.
+CU15. Atender reserva en sucursal
+
+===== PAGINA 69 =====
+68
+Diagrama de Comunicación — CU15 Atender reserva en sucursal
+Reutiliza nuevamente reservaController y modeloReserva de CU13/CU14. El actor cambia a
+Encargado de Sucursal, y la validación interna corresponde a comprobar que la reserva exista y
+siga vigente antes de marcarla como atendida.
+CU16. Gestionar carrito de compras
+Diagrama de Comunicación — CU16 Gestionar carrito de compras
+CRUD de tres operaciones (agregar, actualizar cantidad, quitar), mismo patrón que CU4/CU9. El
+carrito se modela como entidad propia (modeloCarrito) y no como parte de modeloReserva,
+porque conceptualmente pertenece al subpaquete Checkout y antecede a la compra digital de
+CU17 (Ciclo 3), no a la reserva física en sucursal.
+CU21. Gestionar movimientos de inventario
+
+===== PAGINA 70 =====
+69
+Diagrama de Comunicación — CU21 Gestionar movimientos de inventario
+Combina un flujo de escritura (1: registrar movimiento de ingreso o merma, con validación de
+cantidad) y un flujo de solo lectura (2: consultar existencias y agotados, sin validación), ambos
+sobre modeloInventario — la misma entidad que CU11 consulta en modo lectura. Se numeran
+por separado (1.x / 2.x) en vez de forzarlos a compartir una sola secuencia, siguiendo el mismo
+criterio de CU5 y CU9 para operaciones genuinamente distintas sobre una entidad compartida.
+CICLO #3
+CU12. Usar vestidor virtual (AR)
+Diagrama de Comunicación — CU12 Usar vestidor virtual (AR)
+Flujo simple de un solo paso. Se marca explícitamente el self-loop procesarFrameCamara()
+como de riesgo alto, consistente con la matriz de priorización: es el procesamiento en tiempo
+real más exigente del proyecto y el que más probablemente requiera ajustar el diseño una vez
+que empiece la implementación.
+CU17. Confirmar compra digital
+
+===== PAGINA 71 =====
+70
+Diagrama de Comunicación — CU17 Confirmar compra digital
+El procesamiento del pago no se dibuja como una llamada más dentro de este diagrama: el
+propio documento indica que CU19 (Procesar pago electrónico) está “incluido en CU17/CU18”,
+por lo que aquí solo se referencia con la relación «include» y se remite al diagrama propio de
+CU19 para el detalle de esa comunicación.
+CU18. Registrar venta presencial
+Diagrama de Comunicación — CU18 Registrar venta presencial
+Mismo patrón que CU17, con el actor correcto según el catálogo de casos de uso: Cajero, no
+Administrador ni Encargado de Sucursal. modeloPedido se reutiliza de CU17, distinguiendo el
+registro mediante tipo=PRESENCIAL. El pago solo se incluye condicionalmente (si el cliente
+paga con tarjeta); si paga en efectivo, CU19 no se dispara.
+CU19. Procesar pago electrónico
+
+===== PAGINA 72 =====
+71
+Diagrama de Comunicación — CU19 Procesar pago electrónico
+A diferencia de todos los diagramas anteriores, este no inicia con un actor humano: el
+documento lo define como “incluido en CU17/CU18”, por lo que el primer participante es el
+controller que lo invoca (pedidoController o ventaController), no una persona. Por la misma
+razón no existe una “vista” propia para este caso de uso. El registro del pago se modela como
+un self-loop en vez de una clase modeloPago separada en la cadena principal, para no forzar
+una dependencia no adyacente entre pagoController y la pasarela externa.
+CU20. Actualizar inventario automáticamente
+Diagrama de Comunicación — CU20 Actualizar inventario automáticamente
+Tampoco lo dispara un actor humano: el catálogo de casos de uso define su actor como
+“Sistema”, activado automáticamente al confirmarse una venta (CU17/CU18). Reutiliza
+inventarioController y modeloInventario ya definidos en CU21 del Ciclo 2, ahora con la operación
+de descuento de stock que ese caso de uso no necesitaba.
+CU22. Recomendar prendas (IA)
+
+===== PAGINA 73 =====
+72
+Diagrama de Comunicación — CU22 Recomendar prendas (IA)
+El catálogo de casos de uso define el actor principal como “Servicio de IA”; aquí se modela con
+el Cliente como disparador natural (ver el catálogo activa la solicitud de recomendaciones) y
+geminiAIClient como participante activo que efectivamente genera la sugerencia. La consulta a
+modeloProducto se muestra como self-loop para mantener la cadena principal lineal.
+CU23. Consultar asistente virtual
+Diagrama de Comunicación — CU23 Consultar asistente virtual (chatbot)
+Reutiliza geminiAIClient de CU22, mismo servicio de IA con distinta finalidad (chat
+conversacional en vez de recomendación proactiva). El registro de la conversación se modela
+igualmente como self-loop sobre asistenteController.
+CICLO #4
+CU24. Generar reporte por comando de voz
+
+===== PAGINA 74 =====
+73
+Diagrama de Comunicación — CU24 Generar reporte por comando de voz
+Extensión opcional con prioridad baja y riesgo alto según la matriz de priorización del proyecto;
+se marca explícitamente en el self-loop generarReporte(), que es el paso que traduce la
+intención detectada por voz en una consulta real sobre pedidos/inventario. Por tratarse de una
+extensión de baja prioridad, es el primer candidato a recortar si el tiempo de implementación se
+ajusta.
+CU25. Consultar reportes y dashboards
+Diagrama de Comunicación — CU25 Consultar reportes y dashboards
+Flujo de solo lectura, mismo criterio que CU6/CU11 en ciclos anteriores: sin self-loop de
+validación. modeloKPI representa una vista agregada sobre pedidos, inventario y reservas (no
+una tabla física nueva del script de la sección 3.3); se modela como una única clase para no
+forzar una dependencia no adyacente entre dashboardController y tres modelos distintos.
+CU26. Consultar historial de compras
+
+===== PAGINA 75 =====
+74
+Diagrama de Comunicación — CU26 Consultar historial de compras
+Flujo de solo lectura sobre modeloPedido, ya definido en el Ciclo 3 (CU17/CU18). No se crea
+una clase nueva: el historial del cliente es simplemente una consulta filtrada por cliente_id sobre
+la misma tabla pedidos del script SQL.
+2.3. Diagrama de Análisis de una Clase
+Ciclo #1
+Para cada caso de uso del Ciclo 1 se detalla la clase «Actor», la clase vista (atributos =
+campos que el actor ve y llena en pantalla; operaciones = acciones de interfaz), la clase
+controller (lógica de validación y coordinación) y la o las clases modelo (atributos privados
+persistentes y operaciones de acceso a datos, que en el Diseño de Datos se traducirán en las
+tablas y consultas correspondientes).
+CU1. Registrarse
+Diagrama de Análisis de Clase CU1 Registrarse
+CU2. Iniciar sesión
+
+===== PAGINA 76 =====
+75
+Diagrama de Análisis de Clase CU2 Iniciar sesión
+CU3. Gestionar perfil
+Diagrama de Análisis de Clase CU3 Gestionar perfil
+CU5. Gestionar sucursales
+Diagrama de Análisis de Clase CU5 Gestionar sucursales
+CU6. Consultar sucursales por ciudad
+
+===== PAGINA 77 =====
+76
+Diagrama de Análisis de Clase CU6 Consultar sucursales por ciudad
+CU7. Gestionar productos
+Diagrama de Análisis de Clase CU7 Gestionar productos
+CU10. Consultar catálogo y buscar prendas
+
+===== PAGINA 78 =====
+77
+Diagrama de Análisis de Clase CU10 Consultar catálogo y buscar prendas
+Ciclo #2
+CU4. Gestionar usuarios y roles
+Diagrama de Análisis de Clase CU4 Gestionar usuarios y roles
+modeloUsuario es la misma clase de CU1–CU3, ampliada aquí con el atributo -activo (usado por
+desactivarUsuario) y las operaciones update() y desactivar(), que no eran necesarias en el Ciclo
+1.
+CU8. Gestionar temporadas y colecciones
+
+===== PAGINA 79 =====
+78
+Diagrama de Análisis de Clase CU8 Gestionar temporadas y colecciones
+modeloTemporada no define delete() ni el atributo -activo con operación de baja, en línea con el
+CRUD de solo dos operaciones ya justificado en el diagrama de comunicación de este mismo
+caso de uso.
+CU9. Gestionar proveedores
+Diagrama de Análisis de Clase CU9 Gestionar proveedores
+Misma estructura de CU5 (Ciclo 1) y CU4: atributo -activo y operación desactivar() en vez de
+delete(), para no perder la relación con productos ya asociados al proveedor.
+CU11. Consultar disponibilidad por sucursal
+
+===== PAGINA 80 =====
+79
+Diagrama de Análisis de Clase CU11 Consultar disponibilidad por sucursal
+disponibilidadController expone una única operación de solo lectura. modeloInventario es la
+misma clase que administrará CU21; aquí solo se muestran las operaciones de consulta
+(findStock, findBySucursal) que este caso de uso necesita.
+CU13. Reservar prendas
+Diagrama de Análisis de Clase CU13 Reservar prendas
+No se agrega una clase Inventario al diagrama: verificarDisponibilidad() se resuelve como lógica
+interna de reservaController, tal como se justificó en el diagrama de comunicación de este caso
+de uso.
+CU14. Gestionar reserva (consultar / cancelar)
+
+===== PAGINA 81 =====
+80
+Diagrama de Análisis de Clase CU14 Gestionar reserva (consultar / cancelar)
+reservaController y modeloReserva son las mismas clases de CU13, con dos operaciones
+adicionales (listarReservas, cancelarReserva / findByCliente, updateEstado) en vez de duplicar
+el controller.
+CU15. Atender reserva en sucursal
+Diagrama de Análisis de Clase CU15 Atender reserva en sucursal
+Tercer y último caso de uso que reutiliza reservaController / modeloReserva; cambia el actor a
+Encargado de Sucursal y agrega findByCodigo(), necesario para localizar la reserva física en el
+mostrador.
+CU16. Gestionar carrito de compras
+Diagrama de Análisis de Clase CU16 Gestionar carrito de compras
+modeloCarrito es una clase propia y no una extensión de modeloReserva: pertenece al
+subpaquete Checkout y antecede a la compra digital de CU17 (Ciclo 3), no a la reserva física en
+sucursal.
+CU21. Gestionar movimientos de inventario
+
+===== PAGINA 82 =====
+81
+Diagrama de Análisis de Clase CU21 Gestionar movimientos de inventario
+modeloInventario es la misma clase de CU11, ahora con las operaciones de escritura
+(registrarMovimiento) que ese caso de uso no necesitaba por ser de solo lectura.
+CICLO #3
+CU12 — Usar vestidor virtual (AR)
+CU17 — Confirmar compra digital
+CU18 — Registrar venta presencial
+CU19 — Procesar pago electrónico
+CU20 — Actualizar inventario automáticamente
+CU22 — Recomendar prendas (IA)
+CU23 — Consultar asistente virtual (chatbot)
+CICLO #4
+CU24 — Generar reporte por comando de voz (extensión opcional, prioridad baja)
+CU25 — Consultar reportes y dashboards
+CU26 — Consultar historial de compras
+2.4. Análisis de Paquete
+El objetivo de este análisis es determinar el grado de acoplamiento entre los paquetes del
+sistema, considerando ahora los 5 paquetes de todo el proyecto (26 casos de uso, 4 ciclos)
+definidos en la sección 2.1, y no únicamente los del Ciclo 1. En FashionStore, los paquetes
+no son islas aisladas: la información fluye de uno a otro para completar procesos de negocio
+completos, como reservar una prenda o generar un reporte de ventas.
+
+===== PAGINA 83 =====
+82
+Diagrama de Dependencia entre Paquetes — Proyecto Completo (FashionStore)
+Análisis Funcional de las Dependencias
+1. Dependencia con Gestión de Identidad y Acceso: los cuatro paquetes restantes
+(Catálogo y Sucursales, Operaciones de Compra, Pagos e Inventario, e Inteligencia y
+Analítica) dependen de este paquete. Antes de ejecutar cualquier caso de uso restringido
+desde gestionar un producto (CU7) hasta generar un reporte (CU25) el sistema debe
+verificar la identidad y el rol del actor autenticado.
+
+===== PAGINA 84 =====
+83
+2. Gestión de Operaciones de Compra → Gestión de Catálogo y Sucursales: para
+reservar una prenda (CU13) o confirmar una compra (CU17), el paquete de operaciones
+debe conocer qué productos existen y en qué sucursal están disponibles (CU10, CU11); sin
+ese contexto, la compra no tendría sustento.
+3. Gestión de Operaciones de Compra → Pagos e Inventario: al confirmar la compra
+digital (CU17) o registrar la venta presencial (CU18), se invoca el procesamiento del pago
+(CU19, incluido) y se dispara la actualización automática del inventario (CU20).
+4. Pagos e Inventario → Gestión de Catálogo y Sucursales: cada movimiento de
+inventario (CU20, CU21) pertenece a un producto específico dentro de una sucursal
+específica; sin esas dos referencias, un registro de stock no tendría contexto.
+5. Inteligencia y Analítica → Gestión de Catálogo y Sucursales: recomendar prendas
+(CU22) exige conocer el catálogo disponible; sin datos de producto, no hay nada que
+recomendar.
+6. Inteligencia y Analítica → Gestión de Operaciones de Compra: el historial de
+compras del cliente (CU26) y los reportes de ventas (CU25) se construyen a partir de los
+datos que genera este paquete al confirmarse cada compra.
+7. Inteligencia y Analítica → Pagos e Inventario: los reportes de inventario (CU25) leen
+directamente los movimientos y niveles de stock que gestiona este paquete.
+3. Flujo de Trabajo: Diseño
+3.1. Diseño de Arquitectura
+3.1.1. Diseño físico (Diagrama de despliegue)
+
+===== PAGINA 85 =====
+84
+3.1.2. Diseño Lógico (Diagrama de Paquete)
+
+===== PAGINA 86 =====
+85
+3.1.3. Diagrama de Red
+
+===== PAGINA 87 =====
+86
+3.2 Diagramas de Secuencia
+Ciclo #1
+
+===== PAGINA 88 =====
+87
+CU1. Registrarse
+Figura 6. Diagrama de Secuencia — CU1 Registrarse
+
+===== PAGINA 89 =====
+88
+CU2. Iniciar sesión
+Figura 7. Diagrama de Secuencia — CU2 Iniciar sesión
+
+===== PAGINA 90 =====
+89
+CU3. Gestionar perfil
+Figura 8. Diagrama de Secuencia — CU3 Gestionar perfil
+
+===== PAGINA 91 =====
+90
+CU5. Gestionar sucursales
+
+===== PAGINA 92 =====
+91
+Figura 9. Diagrama de Secuencia — CU5 Gestionar sucursales
+CU6. Consultar sucursales por ciudad
+
+===== PAGINA 93 =====
+92
+Figura 10. Diagrama de Secuencia — CU6 Consultar sucursales por ciudad
+CU7. Gestionar productos
+
+===== PAGINA 94 =====
+93
+Figura 11. Diagrama de Secuencia — CU7 Gestionar productos
+CU10. Consultar catálogo y buscar prendas
+
+===== PAGINA 95 =====
+94
+Figura 12. Diagrama de Secuencia — CU10 Consultar catálogo y buscar prendas
+1.1. Diagrama de Secuencia
+
+===== PAGINA 96 =====
+95
+Ciclo #2
+CU4. Gestionar usuarios y roles
+
+===== PAGINA 97 =====
+96
+
+===== PAGINA 98 =====
+97
+Figura 13. Diagrama de Secuencia CU4. Gestionar usuarios y roles
+CU8. Gestionar temporadas y colecciones
+Figura 14. Diagrama de Secuencia CU8. Gestionar temporadas y colecciones
+
+===== PAGINA 99 =====
+98
+CU9. Gestionar proveedores
+
+===== PAGINA 100 =====
+99
+Figura 15. Diagrama de Secuencia CU9. Gestionar proveedores
+CU11. Consultar disponibilidad por sucursal
+Figura 16. Diagrama de Secuencia CU11. Consultar disponibilidad por sucursal
+CU13. Reservar prendas
+Figura 17. Diagrama de Secuencia CU13. Reservar prendas
+
+===== PAGINA 101 =====
+100
+CU14. Gestionar reserva (consultar / cancelar)
+Figura 18. Diagrama de Secuencia CU14. Gestionar reserva (consultar / cancelar)
+CU15. Atender reserva en sucursal
+
+===== PAGINA 102 =====
+101
+Figura 19. Diagrama de Secuencia CU15. Atender reserva en sucursal
+CU16. Gestionar carrito de compras
+
+===== PAGINA 103 =====
+102
+Figura 20. Diagrama de Secuencia CU16. Gestionar carrito de compras
+CU21. Gestionar movimientos de inventario
+
+===== PAGINA 104 =====
+103
+Figura 21. Diagrama de Secuencia CU21. Gestionar movimientos de inventario
+CICLO #3
+CU12 — Usar vestidor virtual (AR)
+CU17 — Confirmar compra digital
+CU18 — Registrar venta presencial
+CU19 — Procesar pago electrónico
+CU20 — Actualizar inventario automáticamente
+CU22 — Recomendar prendas (IA)
+CU23 — Consultar asistente virtual (chatbot)
+CICLO #4
+CU24 — Generar reporte por comando de voz (extensión opcional, prioridad baja)
+CU25 — Consultar reportes y dashboards
+CU26 — Consultar historial de compras
+
+===== PAGINA 105 =====
+104
+3.3 Diseño de Datos Lógico
+3.3.1 Diagrama de Clase
+3.3.2 Mapeo
+Para cada entidad se indica su clave primaria, sus claves foráneas y el resto de sus
+atributos, como base para el diseño físico de la sección 1.2.2.
+usuarios
+PK FK Otros campos
+id — full_name, email, phone, password_hash, role, is_active,
+created_at, updated_at
+sucursales
+PK FK Otros campos
+id — nombre, ciudad, direccion, telefono, latitud, longitud, is_active,
+created_at
+temporadas
+PK FK Otros campos
+id — nombre, anio, descripcion, fecha_inicio, fecha_fin, is_active
+
+===== PAGINA 106 =====
+105
+proveedores
+PK FK Otros campos
+id — razon_social, nit, telefono, correo, direccion, is_active
+productos
+PK FK Otros campos
+id temporada_id, nombre, descripcion, categoria, precio, is_active, created_at
+proveedor_id
+inventario
+PK FK Otros campos
+id producto_id, talla, color, cantidad_disponible
+sucursal_id
+carrito_items
+PK FK Otros campos
+id cliente_id, talla, color, cantidad, fecha_agregado
+producto_id
+reservas
+PK FK Otros campos
+id cliente_id, cantidad, estado, codigo, fecha_reserva, fecha_expiracion
+producto_id,
+sucursal_id
+pedidos
+PK FK Otros campos
+id cliente_id, tipo, estado, total, created_at
+sucursal_id
+detalle_pedido
+PK FK Otros campos
+id pedido_id, talla, color, cantidad, precio_unitario
+producto_id
+pagos
+PK FK Otros campos
+id pedido_id monto, metodo, estado, stripe_payment_id, created_at, paid_at
+notificaciones
+PK FK Otros campos
+id usuario_id titulo, mensaje, is_read, created_at
+3.3.3 Diseño de Datos Físico
+3.3.3.1. Tabla de Volumen
+usuarios
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador único del usuario
+full_name VARCHAR(150) Nombre completo
+
+===== PAGINA 107 =====
+106
+email UQ VARCHAR(120) Correo electrónico único
+phone UQ VARCHAR(30) Teléfono de contacto
+password_hash VARCHAR(255) Contraseña cifrada con bcrypt
+role VARCHAR(30) CLIENTE / ADMIN /
+ENCARGADO_SUCURSAL
+is_active BOOLEAN Estado de la cuenta
+created_at TIMESTAMP Fecha de creación
+updated_at TIMESTAMP Fecha de actualización
+sucursales
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador de la sucursal
+nombre VARCHAR(120) Nombre comercial
+ciudad VARCHAR(80) Ciudad donde opera
+direccion VARCHAR(180) Dirección física
+telefono VARCHAR(30) Teléfono de contacto
+latitud DECIMAL(10,6) Latitud geográfica
+longitud DECIMAL(10,6) Longitud geográfica
+is_active BOOLEAN Estado de la sucursal
+created_at TIMESTAMP Fecha de creación
+temporadas
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador de la temporada
+nombre VARCHAR(100) Nombre de la temporada/colección
+anio INTEGER Año de la temporada
+descripcion TEXT Descripción de la colección
+fecha_inicio DATE Inicio de vigencia
+fecha_fin DATE Fin de vigencia
+is_active BOOLEAN Estado de la temporada
+proveedores
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del proveedor
+razon_social VARCHAR(150) Nombre legal del proveedor
+nit UQ VARCHAR(30) Identificación tributaria
+telefono VARCHAR(30) Teléfono de contacto
+correo VARCHAR(120) Correo de contacto
+direccion VARCHAR(180) Dirección del proveedor
+is_active BOOLEAN Estado del proveedor
+productos
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del producto
+temporada_id FK INTEGER Temporada/colección a la que
+pertenece
+proveedor_id FK INTEGER Proveedor del producto
+nombre VARCHAR(150) Nombre de la prenda
+
+===== PAGINA 108 =====
+107
+descripcion TEXT Descripción del producto
+categoria VARCHAR(60) Categoría (camisas, pantalones, etc.)
+precio NUMERIC(10,2) Precio de venta
+is_active BOOLEAN Publicado / despublicado
+created_at TIMESTAMP Fecha de creación
+inventario
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del registro de stock
+producto_id FK INTEGER Producto asociado
+sucursal_id FK INTEGER Sucursal asociada
+talla VARCHAR(10) Talla de la variante
+color VARCHAR(40) Color de la variante
+cantidad_disponible INTEGER Existencias disponibles
+carrito_items
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del ítem de carrito
+cliente_id FK INTEGER Cliente propietario del carrito
+producto_id FK INTEGER Producto agregado
+talla VARCHAR(10) Talla seleccionada
+color VARCHAR(40) Color seleccionado
+cantidad INTEGER Cantidad seleccionada
+fecha_agregado TIMESTAMP Fecha en que se agregó
+reservas
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador de la reserva
+cliente_id FK INTEGER Cliente que reserva
+producto_id FK INTEGER Producto reservado
+sucursal_id FK INTEGER Sucursal donde se recoge
+cantidad INTEGER Cantidad reservada
+estado VARCHAR(20) PENDIENTE / ATENDIDA /
+CANCELADA / VENCIDA
+codigo UQ VARCHAR(20) Código de retiro en sucursal
+fecha_reserva TIMESTAMP Fecha de creación de la reserva
+fecha_expiracion TIMESTAMP Vencimiento de la reserva
+pedidos
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del pedido
+cliente_id FK INTEGER Cliente que compra
+sucursal_id FK (nullable) INTEGER Sucursal de recojo (null si es envío
+digital)
+tipo VARCHAR(20) DIGITAL / PRESENCIAL
+estado VARCHAR(20) PENDIENTE / PAGADO / ENVIADO /
+ENTREGADO / CANCELADO
+total NUMERIC(10,2) Monto total del pedido
+
+===== PAGINA 109 =====
+108
+created_at TIMESTAMP Fecha de creación
+detalle_pedido
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del detalle
+pedido_id FK INTEGER Pedido al que pertenece
+producto_id FK INTEGER Producto comprado
+talla VARCHAR(10) Talla comprada
+color VARCHAR(40) Color comprado
+cantidad INTEGER Cantidad comprada
+precio_unitario NUMERIC(10,2) Precio unitario al momento de la
+compra
+pagos
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador del pago
+pedido_id FK/UQ INTEGER Pedido asociado (un pago por pedido)
+monto NUMERIC(10,2) Monto pagado
+metodo VARCHAR(30) TARJETA / EFECTIVO /
+TRANSFERENCIA
+estado VARCHAR(20) PENDIENTE / PROCESANDO /
+COMPLETADO / FALLIDO
+stripe_payment_id VARCHAR(80) Referencia de la pasarela Stripe
+created_at TIMESTAMP Fecha de creación
+paid_at TIMESTAMP Fecha de confirmación del pago
+notificaciones
+Campo PK FK/UQ Tipo Descripción
+id PK INTEGER Identificador de la notificación
+usuario_id FK INTEGER Usuario destinatario
+titulo VARCHAR(120) Título de la notificación
+mensaje TEXT Contenido del mensaje
+is_read BOOLEAN Indicador de lectura
+created_at TIMESTAMP Fecha de creación
+3.3.3.2 Script
+A continuación se presenta el script base en PostgreSQL, coherente con la arquitectura y
+las 12 entidades definidas para la plataforma.
+-- =========================================================
+-- SCRIPT PostgreSQL
+-- FashionStore — Plataforma de E-commerce Multi-Sucursal
+-- =========================================================
+BEGIN;
+CREATE TABLE usuarios (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+full_name VARCHAR(150) NOT NULL,
+email VARCHAR(120) NOT NULL UNIQUE,
+phone VARCHAR(30) NOT NULL UNIQUE,
+password_hash VARCHAR(255) NOT NULL,
+
+===== PAGINA 110 =====
+109
+role VARCHAR(30) NOT NULL CHECK (role IN
+('CLIENTE','ADMIN','ENCARGADO_SUCURSAL')),
+is_active BOOLEAN NOT NULL DEFAULT TRUE,
+created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE sucursales (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+nombre VARCHAR(120) NOT NULL,
+ciudad VARCHAR(80) NOT NULL,
+direccion VARCHAR(180) NOT NULL,
+telefono VARCHAR(30),
+latitud DECIMAL(10,6),
+longitud DECIMAL(10,6),
+is_active BOOLEAN NOT NULL DEFAULT TRUE,
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE temporadas (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+nombre VARCHAR(100) NOT NULL,
+anio INTEGER NOT NULL,
+descripcion TEXT,
+fecha_inicio DATE,
+fecha_fin DATE,
+is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE TABLE proveedores (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+razon_social VARCHAR(150) NOT NULL,
+nit VARCHAR(30) NOT NULL UNIQUE,
+telefono VARCHAR(30),
+correo VARCHAR(120),
+direccion VARCHAR(180),
+is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE TABLE productos (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+temporada_id INTEGER REFERENCES temporadas(id) ON UPDATE CASCADE ON DELETE SET
+NULL,
+proveedor_id INTEGER REFERENCES proveedores(id) ON UPDATE CASCADE ON DELETE
+RESTRICT,
+nombre VARCHAR(150) NOT NULL,
+descripcion TEXT,
+categoria VARCHAR(60),
+precio NUMERIC(10,2) NOT NULL CHECK (precio >= 0),
+is_active BOOLEAN NOT NULL DEFAULT TRUE,
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE inventario (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+producto_id INTEGER NOT NULL REFERENCES productos(id) ON UPDATE CASCADE ON
+DELETE CASCADE,
+sucursal_id INTEGER NOT NULL REFERENCES sucursales(id) ON UPDATE CASCADE
+ON DELETE CASCADE,
+talla VARCHAR(10) NOT NULL,
+color VARCHAR(40) NOT NULL,
+cantidad_disponible INTEGER NOT NULL DEFAULT 0 CHECK (cantidad_disponible >= 0),
+UNIQUE (producto_id, sucursal_id, talla, color)
+);
+CREATE TABLE carrito_items (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+===== PAGINA 111 =====
+110
+cliente_id INTEGER NOT NULL REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE
+CASCADE,
+producto_id INTEGER NOT NULL REFERENCES productos(id) ON UPDATE CASCADE ON DELETE
+CASCADE,
+talla VARCHAR(10) NOT NULL,
+color VARCHAR(40) NOT NULL,
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+fecha_agregado TIMESTAMP NOT NULL DEFAULT NOW(),
+UNIQUE (cliente_id, producto_id, talla, color)
+);
+CREATE TABLE reservas (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+cliente_id INTEGER NOT NULL REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE
+RESTRICT,
+producto_id INTEGER NOT NULL REFERENCES productos(id) ON UPDATE CASCADE ON DELETE
+RESTRICT,
+sucursal_id INTEGER NOT NULL REFERENCES sucursales(id) ON UPDATE CASCADE ON
+DELETE RESTRICT,
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+estado VARCHAR(20) NOT NULL CHECK (estado IN
+('PENDIENTE','ATENDIDA','CANCELADA','VENCIDA')),
+codigo VARCHAR(20) NOT NULL UNIQUE,
+fecha_reserva TIMESTAMP NOT NULL DEFAULT NOW(),
+fecha_expiracion TIMESTAMP NOT NULL
+);
+CREATE TABLE pedidos (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+cliente_id INTEGER NOT NULL REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE
+RESTRICT,
+sucursal_id INTEGER REFERENCES sucursales(id) ON UPDATE CASCADE ON DELETE SET
+NULL,
+tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('DIGITAL','PRESENCIAL')),
+estado VARCHAR(20) NOT NULL CHECK (estado IN
+('PENDIENTE','PAGADO','ENVIADO','ENTREGADO','CANCELADO')),
+total NUMERIC(10,2) NOT NULL CHECK (total >= 0),
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE detalle_pedido (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON UPDATE CASCADE ON DELETE
+CASCADE,
+producto_id INTEGER NOT NULL REFERENCES productos(id) ON UPDATE CASCADE ON DELETE
+RESTRICT,
+talla VARCHAR(10) NOT NULL,
+color VARCHAR(40) NOT NULL,
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+precio_unitario NUMERIC(10,2) NOT NULL CHECK (precio_unitario >= 0)
+);
+CREATE TABLE pagos (
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+pedido_id INTEGER NOT NULL UNIQUE REFERENCES pedidos(id) ON UPDATE
+CASCADE ON DELETE RESTRICT,
+monto NUMERIC(10,2) NOT NULL CHECK (monto >= 0),
+metodo VARCHAR(30) NOT NULL CHECK (metodo IN
+('TARJETA','EFECTIVO','TRANSFERENCIA')),
+estado VARCHAR(20) NOT NULL CHECK (estado IN
+('PENDIENTE','PROCESANDO','COMPLETADO','FALLIDO')),
+stripe_payment_id VARCHAR(80),
+created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+paid_at TIMESTAMP
+);
+CREATE TABLE notificaciones (
+
+===== PAGINA 112 =====
+111
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE
+CASCADE,
+titulo VARCHAR(120) NOT NULL,
+mensaje TEXT NOT NULL,
+is_read BOOLEAN NOT NULL DEFAULT FALSE,
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_productos_temporada_id ON productos(temporada_id);
+CREATE INDEX idx_productos_proveedor_id ON productos(proveedor_id);
+CREATE INDEX idx_inventario_producto_id ON inventario(producto_id);
+CREATE INDEX idx_inventario_sucursal_id ON inventario(sucursal_id);
+CREATE INDEX idx_carrito_cliente_id ON carrito_items(cliente_id);
+CREATE INDEX idx_reservas_cliente_id ON reservas(cliente_id);
+CREATE INDEX idx_reservas_sucursal_id ON reservas(sucursal_id);
+CREATE INDEX idx_pedidos_cliente_id ON pedidos(cliente_id);
+CREATE INDEX idx_detalle_pedido_pedido_id ON detalle_pedido(pedido_id);
+CREATE INDEX idx_notificaciones_usuario ON notificaciones(usuario_id);
+COMMIT;
+4. Flujo de Trabajo: Implementación
+4.1. Elección de Plataforma de Desarrollo de Software
+La selección de la pila tecnológica (tech stack) se realizó bajo criterios de
+escalabilidad, rendimiento y mantenibilidad, optando por tecnologías que permiten
+una integración fluida entre cliente, servidor y los servicios externos de pagos y
+notificaciones que requiere la plataforma.
+FastAPI (Backend): se eligió por encima de alternativas como Django o Flask
+debido a su soporte nativo para operaciones asíncronas. Esto es importante porque
+las llamadas a la pasarela de pagos (Stripe) y, en ciclos posteriores, a los servicios
+de IA de recomendación, no deben bloquear el hilo de ejecución. FastAPI permite
+atender múltiples solicitudes de checkout y consulta de disponibilidad
+simultáneamente sin degradar el rendimiento.
+Flutter (App Móvil): se eligió por su motor de renderizado de alto rendimiento
+(Skia), que da una experiencia fluida al cliente al navegar el catálogo. Al compilar a
+código nativo en Android e iOS, garantiza acceso con baja latencia a la cámara del
+dispositivo, necesaria para el módulo de vestidor virtual (AR) planificado para el
+Ciclo 3.
+Angular 18 (Panel Web): para el panel de administración de sucursales y catálogo
+se optó por Angular por su arquitectura basada en componentes y tipado fuerte
+(TypeScript). El uso de RxJS y Observables permite que el panel de inventario se
+actualice cada vez que cambia el stock de una sucursal, sin refrescar la página
+manualmente.
+
+===== PAGINA 113 =====
+112
+PostgreSQL (Base de Datos): se seleccionó por su robustez, integridad referencial
+y soporte transaccional, necesarios para garantizar que una reserva o un pedido
+nunca queden en un estado inconsistente frente al inventario disponible (ver sección
+3.3, Diseño de Datos).
+Componente Tecnología Justificación
+Backend FastAPI + Python API REST de alto rendimiento, validación
+automática, tipado y documentación
+interactiva.
+Base de datos PostgreSQL Persistencia relacional, integridad referencial
+y soporte transaccional.
+Aplicación web Angular 18 Panel de sucursales y catálogo con
+componentes reutilizables, guards e
+interceptores.
+Aplicación móvil Flutter Experiencia móvil multiplataforma para
+clientes; base para el vestidor virtual (AR) del
+Ciclo 3.
+Autenticación JWT + bcrypt Control de acceso seguro y protección de
+credenciales.
+Pagos Stripe (modo Procesamiento de pagos digitales y
+sandbox) conciliación de transacciones.
+Notificaciones Firebase Cloud Comunicación en tiempo real con clientes y
+Messaging encargados de sucursal.
+Infraestructura Railway Despliegue y hosting controlado del backend,
+frontend web y base de datos.
+4.2. Implementación de la Arquitectura del Sistema
+4.2.1. Diagrama de Componente Principal del Sistema
+El sistema se organiza en tres subsistemas: el Frontend (aplicaciones cliente móvil y
+web), el Servidor Backend (API REST en FastAPI, con los servicios de
+autenticación, disponibilidad/reserva, pagos y notificaciones) y el Subsistema de
+Datos (PostgreSQL vía SQLAlchemy ORM).
+
+===== PAGINA 114 =====
+113
+Figura 36. Diagrama de Componente Principal del Sistema
+4.3. Implementación de la Arquitectura del Subsistema
+4.3.1. Diagrama de Componente de cada Paquete
+Para cada uno de los 5 paquetes identificados en el Análisis de Arquitectura
+(sección 2.1) se muestran los archivos de vista, controlador y modelo involucrados,
+y sus dependencias. Los componentes marcados "(Ciclo 3)" corresponden a casos
+de uso todavía no detallados en Requisitos y se incluyen aquí únicamente para
+mostrar dónde encajarán dentro de la arquitectura ya definida.
+Paquete 1: Gestión de Identidad y Acceso
+Figura 37. Diagrama de Componente — Paquete 1: Gestión de Identidad y Acceso
+
+===== PAGINA 115 =====
+114
+Paquete 2: Gestión de Catálogo y Sucursales
+Figura 38. Diagrama de Componente — Paquete 2: Gestión de Catálogo y
+Sucursales
+Paquete 3: Gestión de Operaciones de Compra
+Figura 39. Diagrama de Componente — Paquete 3: Gestión de Operaciones de
+Compra
+Paquete 4: Inteligencia de Recomendación y Vestidor Virtual
+
+===== PAGINA 116 =====
+115
+Figura 40. Diagrama de Componente — Paquete 4: Inteligencia de Recomendación
+y Vestidor Virtual (Ciclo 3)
+Paquete 5: Pagos y Notificaciones
+Figura 41. Diagrama de Componente — Paquete 5: Pagos y Notificaciones
+ANEXOS
+https://github.com/bmateo637coder/ParcialSI2
+
+===== PAGINA 117 =====
+116

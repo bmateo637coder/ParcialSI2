@@ -1,0 +1,269 @@
+@startuml FashionStore_Dominio_2doParcial
+title Modelo de Dominio - FashionStore SaaS Multitenant (ICONIX)
+skinparam classAttributeIconSize 0
+
+' ===========================
+' PLATAFORMA SAAS Y TENANT
+' ===========================
+class Empresa {
+  +id: int
+  +razon_social: String
+  +nit: String
+  +logo_url: String
+  +email_contacto: String
+  +telefono: String
+  +direccion: String
+  +is_active: bool
+  +created_at: DateTime
+}
+
+class Plan {
+  +id: int
+  +nombre: String <<BASICO|PROFESIONAL>>
+  +max_sucursales: int
+  +permite_reportes_ia: bool
+  +permite_analitica_ml: bool
+  +precio_mensual: float
+  +descripcion: String
+  +is_active: bool
+}
+
+class Suscripcion {
+  +id: int
+  +empresa_id: int
+  +plan_id: int
+  +fecha_inicio: Date
+  +fecha_vencimiento: Date
+  +estado: String <<ACTIVA|VENCIDA|SUSPENDIDA|CANCELADA>>
+  +created_at: DateTime
+}
+
+' ===========================
+' ORGANIZACIÓN Y USUARIOS
+' ===========================
+class Sucursal {
+  +id: int
+  +empresa_id: int
+  +nombre: String
+  +ciudad: String
+  +direccion: String
+  +telefono: String
+  +is_active: bool
+}
+
+class Role {
+  +id: int
+  +empresa_id: int
+  +nombre: String
+  +descripcion: String
+}
+
+class Usuario {
+  +id: int
+  +empresa_id: int
+  +rol_id: int
+  +nombres: String
+  +apellidos: String
+  +email: String
+  +telefono: String
+  +password_hash: String
+  +is_active: bool
+  +created_at: DateTime
+}
+
+' ===========================
+' CATÁLOGO E INVENTARIO
+' ===========================
+class Producto {
+  +id: int
+  +empresa_id: int
+  +proveedor_id: int
+  +categoria_id: int
+  +temporada_id: int
+  +coleccion_id: int
+  +nombre: String
+  +descripcion: Text
+  +precio_base: float
+  +imagen_url: String
+  +is_active: bool
+}
+
+class VarianteProducto {
+  +id: int
+  +empresa_id: int
+  +producto_id: int
+  +talla_id: int
+  +color_id: int
+  +sku: String
+  +precio: float
+  +is_active: bool
+}
+
+class Inventario {
+  +id: int
+  +empresa_id: int
+  +variante_id: int
+  +sucursal_id: int
+  +cantidad_disponible: int
+}
+
+class MovimientoInventario {
+  +id: int
+  +empresa_id: int
+  +inventario_id: int
+  +usuario_id: int
+  +tipo: String <<INGRESO|SALIDA|AJUSTE|RESERVA|DEVOLUCION>>
+  +cantidad: int
+  +motivo: String
+  +created_at: DateTime
+}
+
+' ===========================
+' COMERCIO
+' ===========================
+class Reserva {
+  +id: int
+  +empresa_id: int
+  +cliente_id: int
+  +sucursal_id: int
+  +codigo: String
+  +estado: String <<PENDIENTE|ATENDIDA|CANCELADA|VENCIDA>>
+  +fecha_reserva: DateTime
+  +fecha_vencimiento: DateTime
+}
+
+class ItemReserva {
+  +id: int
+  +empresa_id: int
+  +reserva_id: int
+  +variante_id: int
+  +cantidad: int
+  +precio_unitario: float
+}
+
+class Venta {
+  +id: int
+  +empresa_id: int
+  +cliente_id: int
+  +sucursal_id: int
+  +usuario_cajero_id: int
+  +tipo: String <<DIGITAL|PRESENCIAL>>
+  +estado: String <<PENDIENTE|PAGADO|ENVIADO|ENTREGADO|CANCELADO>>
+  +total: float
+  +forma_pago: String <<TARJETA|EFECTIVO|TRANSFERENCIA>>
+  +es_offline: bool
+  +origen: String <<ONLINE|OFFLINE>>
+  +created_at: DateTime
+}
+
+class ItemVenta {
+  +id: int
+  +empresa_id: int
+  +venta_id: int
+  +variante_id: int
+  +cantidad: int
+  +precio_unitario: float
+  +descuento: float
+}
+
+' ===========================
+' OPERACIÓN OFFLINE Y SINCRONIZACIÓN
+' ===========================
+class OperacionSync {
+  +id: int
+  +uuid: String <<UUID v4>>
+  +empresa_id: int
+  +sucursal_id: int
+  +usuario_id: int
+  +tipo_operacion: String <<RESERVA|VENTA_CONTADO>>
+  +payload_json: Text
+  +estado: String <<REGISTRADA_LOCAL|ENVIADA|CONFIRMADA|RECHAZADA|EN_CONFLICTO>>
+  +intentos: int
+  +fecha_local: DateTime
+  +fecha_sync: DateTime
+  +respuesta_servidor: Text
+}
+
+class ConflictoSync {
+  +id: int
+  +empresa_id: int
+  +operacion_sync_id: int
+  +motivo: String
+  +stock_disponible: int
+  +cantidad_solicitada: int
+  +resuelto: bool
+  +resuelto_por: int
+  +fecha_resolucion: DateTime
+  +accion_tomada: String
+}
+
+class CambioPrenda {
+  +id: int
+  +empresa_id: int
+  +venta_id: int
+  +usuario_id: int
+  +fecha_solicitud: DateTime
+  +fecha_limite: DateTime
+  +estado: String <<PENDIENTE|APROBADO|RECHAZADO>>
+  +observaciones: Text
+}
+
+' ===========================
+' REPORTES IA Y ML
+' ===========================
+class SolicitudReporteIA {
+  +id: int
+  +empresa_id: int
+  +usuario_id: int
+  +pregunta_natural: Text
+  +tipo_reporte: String
+  +filtros_json: Text
+  +parametros_json: Text
+  +sql_generado_validado: Text
+  +estado: String <<PENDIENTE|PROCESANDO|COMPLETADO|RECHAZADO>>
+  +resultado_json: Text
+  +grafico_tipo: String
+  +archivo_pdf_url: String
+  +archivo_excel_url: String
+  +created_at: DateTime
+}
+
+class ModeloML {
+  +id: int
+  +empresa_id: int
+  +nombre: String
+  +tipo: String <<SUPERVISADO|NO_SUPERVISADO>>
+  +algoritmo: String <<LINEAR_REGRESSION|KMEANS|RANDOM_FOREST>>
+  +archivo_joblib: String
+  +metricas_json: Text
+  +estado: String <<ENTRENANDO|ENTRENADO|ERROR>>
+  +fecha_entrenamiento: DateTime
+}
+
+' ===========================
+' RELACIONES
+' ===========================
+Empresa "1" -- "*" Sucursal
+Empresa "1" -- "*" Usuario
+Empresa "1" -- "1" Suscripcion
+Plan "1" -- "*" Suscripcion
+Suscripcion "*" -- "1" Empresa
+Suscripcion "*" -- "1" Plan
+
+Sucursal "1" -- "*" Inventario
+Producto "1" -- "*" VarianteProducto
+VarianteProducto "1" -- "*" Inventario
+Inventario "1" -- "*" MovimientoInventario
+
+Reserva "1" -- "*" ItemReserva
+Venta "1" -- "*" ItemVenta
+Venta "1" -- "*" OperacionSync
+OperacionSync "1" -- "0..1" ConflictoSync
+Venta "1" -- "*" CambioPrenda
+
+Usuario "1" -- "*" SolicitudReporteIA
+Usuario "1" -- "*" OperacionSync
+Empresa "1" -- "*" ModeloML
+Empresa "1" -- "*" OperacionSync
+
+@enduml

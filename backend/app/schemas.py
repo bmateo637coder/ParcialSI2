@@ -855,3 +855,137 @@ class VoiceReportResponse(BaseModel):
     message: Optional[str] = None
     intent: VoiceReportIntent
     data: Optional[DashboardReport] = None
+
+# ======================================================================
+# PLATAFORMA SAAS - 2DO PARCIAL
+# ======================================================================
+
+
+class PlanBase(BaseModel):
+    nombre: str
+    max_sucursales: int = 2
+    permite_reportes_ia: bool = False
+    permite_analitica_ml: bool = False
+    precio_mensual: float = 0.0
+    descripcion: Optional[str] = None
+    is_active: bool = True
+
+
+class PlanCreate(PlanBase):
+    pass
+
+
+class PlanResponse(PlanBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EmpresaBase(BaseModel):
+    razon_social: str
+    nit: str
+    logo_url: Optional[str] = None
+    email_contacto: Optional[str] = None
+    telefono: Optional[str] = None
+    direccion: Optional[str] = None
+    is_active: bool = True
+
+
+class EmpresaCreate(EmpresaBase):
+    plan_id: int
+
+
+class EmpresaResponse(EmpresaBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuscripcionResponse(BaseModel):
+    id: int
+    empresa_id: int
+    plan_id: int
+    fecha_inicio: date
+    fecha_vencimiento: date
+    estado: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================
+# SYNC OFFLINE - 2DO PARCIAL
+# ======================================================================
+
+
+class SyncItem(BaseModel):
+    uuid: str
+    tipo_operacion: str
+    sucursal_id: int
+    usuario_id: int
+    fecha_local: Optional[datetime] = None
+    cliente_id: Optional[int] = None
+    items: List[dict]
+    total: Optional[float] = 0.0
+    forma_pago: Optional[str] = "EFECTIVO"
+    origen: str = "OFFLINE"
+    payload_extra: Optional[dict] = None
+
+
+class SyncRequest(BaseModel):
+    operaciones: List[SyncItem]
+
+
+class SyncItemResult(BaseModel):
+    uuid: str
+    estado: str
+    mensaje: Optional[str] = None
+    operacion_sync_id: Optional[int] = None
+
+
+class SyncResponse(BaseModel):
+    resultados: List[SyncItemResult]
+
+
+class ResolverConflictoRequest(BaseModel):
+    accion: str
+    cantidad_aceptada: Optional[int] = None
+    observaciones: Optional[str] = None
+
+
+class ConflictoResponse(BaseModel):
+    id: int
+    operacion_sync_id: int
+    motivo: str
+    stock_disponible: int
+    cantidad_solicitada: int
+    resuelto: bool
+    accion_tomada: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================
+# REPORTES IA - 2DO PARCIAL
+# ======================================================================
+
+
+class ReporteIARequest(BaseModel):
+    pregunta_natural: str
+    filtros: Optional[dict] = None
+
+
+class ReporteIAResponse(BaseModel):
+    solicitud_id: int
+    tipo_reporte: str
+    empresa_id: int
+    pregunta_natural: str
+    columnas: List[str]
+    filas: List[Any]
+    grafico: dict
+    filtros_aplicados: dict
+    mensaje: str
+
+
+class ReporteIAExportRequest(BaseModel):
+    solicitud_id: int
+    formato: str

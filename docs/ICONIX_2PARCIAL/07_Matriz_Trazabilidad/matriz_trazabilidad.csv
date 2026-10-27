@@ -1,0 +1,42 @@
+# MATRIZ DE TRAZABILIDAD ICONIX - 2DO PARCIAL
+
+> Trazabilidad: **Requisito (RF) -> Caso de Uso (CU) -> Diagrama de Robustez -> Diagrama de Secuencia -> Clases/Endpoints -> Pruebas (CP/PU)**
+
+## REQUISITOS NUEVOS Y MODIFICADOS
+
+| RF | Requisito | CU | Paquete | Diagrama Robustez | Diagrama Secuencia | Clases / Endpoints | Pruebas | Estado |
+|---|---|---|---|---|---|---|---|---|
+| **RF15** | Registrar empresas contratantes con su administrador | CU27 | P6 | CU27_Robustez | CU27_Secuencia | `Empresa`, `Usuario`, `Role`, `Suscripcion` / `POST /plataforma/empresas` | CP-25 | POR HACER |
+| **RF16** | Asociar usuarios y sucursales a una empresa | CU4(MOD), CU5(MOD), CU27 | P1,P6 | Pendiente | Pendiente | `Usuario`, `Sucursal`, `TenantGuard` | CP-25 | POR HACER |
+| **RF17** | Aislamiento total por tenant en backend | CU4(MOD), CU5(MOD) | P1,P6 | Pendiente | Pendiente | `TenantGuard`, `empresa_id` en tablas | CP-29 | POR HACER |
+| **RF18** | Planes de suscripción (Básico/Profesional) | CU28 | P6 | Pendiente | Pendiente | `Plan` / `GET/PUT /plataforma/planes` | CP-26 | POR HACER |
+| **RF19** | Asignar/cambiar/consultar suscripción | CU29 | P6 | Pendiente | Pendiente | `Suscripcion` / `POST /plataforma/empresas/{id}/suscripcion`, `GET /mi-suscripcion` | CP-26, CP-47 | POR HACER |
+| **RF20** | Restringir por suscripción vencida (solo lectura) | CU29, CU30 | P6 | Pendiente | Pendiente | `SuscripcionService`, `PlanGuard` | CP-47 | POR HACER |
+| **RF21** | Límites por plan (sucursales) y funcionalidades | CU30 | P6 | **CU30_Robustez** | **CU30_Secuencia** | `PlanGuard`, `Sucursal` / Validación transversal | CP-27, CP-28 | EN PROCESO |
+| **RF22** | PWA instalable + Service Worker + IndexedDB | CU31 | P7 | Pendiente | Pendiente | `manifest.webmanifest`, `ngsw-config.json`, IndexedDB | CP-30 | POR HACER |
+| **RF23** | Descarga de catálogo para modo offline | CU31, CU32 | P7 | Pendiente | Pendiente | `/offline/catalogo`, IndexedDB/SQLite | CP-30, CP-31 | POR HACER |
+| **RF24** | Aviso "información puede estar desactualizada" | CU32 | P7 | Pendiente | Pendiente | Lógica UI + fecha de descarga | CP-31 | POR HACER |
+| **RF25** | Registrar reserva sin conexión | CU33 | P7 | Pendiente | Pendiente | `Reserva`, `OperacionSync` (IndexedDB/SQLite) | CP-32 | POR HACER |
+| **RF26** | Registrar venta de contado sin conexión | CU34 | P7 | Pendiente | Pendiente | `Venta`, `ItemVenta`, `OperacionSync` | CP-33 | POR HACER |
+| **RF27** | Consultar operaciones pendientes | CU35 | P7 | Pendiente | Pendiente | Vista cola local | CP-34 | POR HACER |
+| **RF28** | Persistencia tras reinicio de app | CU33, CU34 | P7 | Pendiente | Pendiente | IndexedDB / `sqflite` | CP-33 | POR HACER |
+| **RF29** | Sincronizar operaciones al recuperar conexión | CU36 | P7 | **CU36_Robustez** | **CU36_Secuencia** | `SyncService` / `POST /sync` | CP-35 | EN PROCESO |
+| **RF30** | Idempotencia por UUID (evitar duplicados) | CU36 | P7 | **CU36_Robustez** | **CU36_Secuencia** | `OperacionSync.uuid` UNIQUE + validación | CP-36 | EN PROCESO |
+| **RF31** | Reintentos ante fallos | CU36 | P7 | **CU36_Robustez** | **CU36_Secuencia** | `OperacionSync.intentos` | CP-37 | EN PROCESO |
+| **RF32** | Validación de inventario al sincronizar | CU36 | P7 | **CU36_Robustez** | **CU36_Secuencia** | `InventarioValidator`, `MovimientoInventario` | CP-35, CP-38 | EN PROCESO |
+| **RF33** | Gestión de conflictos (EN_CONFLICTO) | CU37 | P7 | Pendiente | Pendiente | `ConflictoSync` / `GET/POST /sync/conflictos` | CP-38, CP-39 | POR HACER |
+| **RF34** | Resolución de conflictos por Encargado | CU37 | P7 | Pendiente | Pendiente | `ConflictoService` | CP-39 | POR HACER |
+| **RF35** | Cambios de prenda con plazo | CU38 | P7 | Pendiente | Pendiente | `CambioPrenda` / `POST /ventas/{id}/cambios` | CP-40 | POR HACER |
+| **RF36** | Reporte con lenguaje natural (texto/voz) | CU39 | P8 | **CU39_Robustez** | **CU39_Secuencia** | `ReporteIAService`, `LLMClient` / `POST /reportes/ia` | CP-41, CP-42 | EN PROCESO |
+| **RF37** | Filtros por fecha/sucursal/categoría/producto | CU39 | P8 | **CU39_Robustez** | **CU39_Secuencia** | `QueryBuilderSeguro` | CP-41 | EN PROCESO |
+| **RF38** | Consultas controladas, IA sin acceso directo a BD | CU39 | P8 | **CU39_Robustez** | **CU39_Secuencia** | `CatalogoReportes`, validación parámetros | CP-43 | EN PROCESO |
+| **RF39** | Manejo de solicitudes ambiguas/no soportadas | CU39 | P8 | **CU39_Robustez** | **CU39_Secuencia** | `ReporteIAService` | CP-42, CP-43 | EN PROCESO |
+| **RF40** | Exportar PDF/Excel | CU40 | P8 | Pendiente | Pendiente | `ExportService` / `GET /reportes/{id}/export` | CP-44 | POR HACER |
+| **RF41** | ML Supervisado y No Supervisado + datos sintéticos | CU42 | P8 | Pendiente | Pendiente | `MLService`, `.joblib` / `POST /plataforma/ml/entrenar` | CP-46 | POR HACER |
+| **RF42** | Dashboard Analítico con ML | CU41 | P8 | Pendiente | Pendiente | `/analitica/dashboard` | CP-45 | POR HACER |
+
+## LEYENDA
+
+- **EN PROCESO:** Ya hay ficha + diagrama de robustez creados
+- **POR HACER:** Pendiente de crear ficha/robustez/secuencia
+- **CONSERVADO:** CU1-CU26 del 1er parcial se mantienen tal como están

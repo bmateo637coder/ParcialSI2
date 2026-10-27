@@ -1,0 +1,20 @@
+<section style="padding: 1.5rem;">
+  <h2>Sincronización Offline</h2>
+  <p>Ventas de contado y reservas registradas sin conexión</p>
+
+  <button (click)="sincronizar()" [disabled]="cargando || pendientes.length === 0">
+    {{ cargando ? 'Sincronizando...' : 'Sincronizar pendientes' }}
+  </button>
+
+  <h3>Operaciones pendientes: {{ pendientes.length }}</h3>
+  <ul>
+    <li *ngFor="let p of pendientes">
+      {{ p.tipoOperacion }} - UUID: {{ p.uuid }} - Estado: {{ p.estado }} - Total: {{ p.total }}
+    </li>
+  </ul>
+
+  <div *ngIf="resultado">
+    <h3>Resultado</h3>
+    <pre>{{ resultado | json }}</pre>
+  </div>
+</section>

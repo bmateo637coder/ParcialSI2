@@ -1,0 +1,198 @@
+# DIAGRAMAS DE SECUENCIA - ICONIX (2DO PARCIAL)
+
+> Derivados de las fichas de caso de uso. Actor -> Frontera -> Control -> Entidad
+
+## CU36 - Sincronizar Operaciones Pendientes
+
+```plantuml
+@startuml CU36_Secuencia
+title CU36 - Diagrama de Secuencia: Sincronizar Operaciones Pendientes
+actor "Cajero / Encargado" as Actor
+boundary "Pantalla Operaciones Pendientes" as B1
+boundary "Vista Resultado Sincronización" as B2
+control "SyncClientController" as C1
+control "SyncService" as C2
+control "TenantGuard" as C3
+control "IdempotenciaControl" as C4
+control "InventarioValidator" as C5
+entity "OperacionSync" as E1
+entity "ConflictoSync" as E2
+entity "Order" as E3
+entity "Inventario" as E4
+entity "MovimientoInventario" as E5
+
+Actor -> B1 : Presionar "Sincronizar"
+B1 -> C1 : obtenerColaPendientes()
+C1 -> C2 : POST /sync {operaciones[]}
+C2 -> C3 : validarEmpresaSucursalUsuario()
+C3 --> C2 : OK
+C2 -> C4 : verificarPorUUID(uuid)
+C4 -> E1 : findByUuid(uuid)
+alt UUID existe y CONFIRMADA
+  E1 --> C4 : operacion CONFIRMADA
+  C4 --> C2 : YA_SINCRONIZADA
+  C2 --> C1 : estado CONFIRMADA (idempotente)
+else Nueva operación
+  C2 -> C5 : validarInventarioPorSucursal(items)
+  C5 -> E4 : consultar por variante_id + branch_id + empresa_id
+  alt Stock suficiente
+    C5 --> C2 : STOCK_OK
+    C2 -> E3 : crear Order (es_offline=true, status=PAGADO)
+    C2 -> E1 : crear/actualizar OperacionSync (CONFIRMADA)
+    C2 -> E5 : registrar movimientos
+    C2 --> C1 : CONFIRMADA
+  else Stock insuficiente
+    C5 --> C2 : STOCK_INSUFICIENTE
+    C2 -> E1 : guardar OperacionSync (EN_CONFLICTO)
+    C2 -> E2 : crear ConflictoSync
+    C2 --> C1 : EN_CONFLICTO
+  end
+end
+C1 -> B2 : mostrar resultados por UUID
+B2 --> Actor : Resultado
+@enduml
+```
+
+## CU30 - Verificar Límites y Restricciones por Plan
+
+```plantuml
+@startuml CU30_Secuencia
+title CU30 - Diagrama de Secuencia: Verificar Límites y Restricciones por Plan
+actor "Sistema" as Actor
+boundary "Interceptor HTTP" as B1
+boundary "Respuesta Autorizado/403" as B2
+control "PlanGuard" as C1
+control "TenantGuard" as C2
+control "SuscripcionService" as C3
+entity "Empresa" as E1
+entity "Suscripcion" as E2
+entity "Plan" as E3
+entity "Sucursal" as E4
+
+Actor -> B1 : Solicitud que requiere validación
+B1 -> C2 : validarTenant()
+C2 -> C1 : validarPorPlan(operacion)
+C1 -> C3 : obtenerSuscripcionActiva(empresa_id)
+C3 -> E1 : buscarEmpresa
+C3 -> E2 : buscarSuscripcion(empresa_id, estado=ACTIVA)
+C3 -> E3 : obtenerPlan(suscripcion.plan_id)
+alt Suscripción vencida
+  C1 --> B2 : 403 Suscripción vencida
+  B2 --> Actor
+else Funcionalidad no permitida (IA/ML)
+  C1 --> B2 : 403 Requiere plan Profesional
+  B2 --> Actor
+else Crear sucursal y excede límite
+  C1 -> E4 : countSucursalesActivas(empresa_id)
+  E4 --> C1 : cantidad
+  alt cantidad >= max_sucursales
+    C1 --> B2 : 403 Límite alcanzado
+    B2 --> Actor
+  else OK
+    C1 --> B2 : AUTORIZADO
+    B2 --> Actor : Continuar flujo
+  end
+else OK
+  C1 --> B2 : AUTORIZADO
+  B2 --> Actor : Continuar flujo
+end
+@enduml
+```
+
+## CU39 - Generar Reporte con Lenguaje Natural
+
+```plantuml
+@startuml CU39_Secuencia
+title CU39 - Diagrama de Secuencia: Reporte Generativo con Lenguaje Natural
+actor "Administrador de Empresa / Encargado" as Actor
+boundary "Pantalla Reportes IA" as B1
+boundary "Vista Resultado (Tabla/Gráfico)" as B2
+boundary "Exportar PDF/Excel" as B3
+control "ReporteIAController" as C1
+control "PlanGuard" as C2
+control "TenantGuard" as C3
+control "ReporteIAService" as C4
+control "LLMClient" as C5
+control "QueryBuilderSeguro" as C6
+control "ExportService" as C7
+entity "SolicitudReporteIA" as E1
+entity "Order" as E2
+entity "OrderItem" as E3
+entity "Product" as E4
+entity "Branch" as E5
+
+Actor -> B1 : Ingresar pregunta (texto/voz)
+B1 -> C1 : POST /reportes/ia
+C1 -> C2 : validarPlanProfesional()
+C1 -> C3 : validarTenant()
+alt No es plan Profesional
+  C2 --> C1 : DENEGADO
+  C1 --> B1 : 403 Requiere plan Profesional
+  B1 --> Actor
+else OK
+  C1 -> C4 : procesarSolicitud(pregunta, empresa_id, usuario_id)
+  C4 -> E1 : crear SolicitudReporteIA (PENDIENTE)
+  C4 -> C5 : interpretar(pregunta + CATALOGO_PERMITIDO)
+  alt Solicitud ambigua/no soportada
+    C5 --> C4 : RECHAZADO/ACLARACION
+    C4 -> E1 : actualizar estado RECHAZADO
+    C4 --> B1 : Solicitar aclaración o rechazar
+    B1 --> Actor
+  else Parámetros válidos
+    C5 --> C4 : {tipo_reporte, filtros, agrupacion}
+    C4 -> C6 : validarYConstruirConsulta(parametros)
+    C6 -> E2 : SELECT parametrizado WHERE empresa_id = ?
+    C6 -> E3
+    C6 -> E4
+    C6 -> E5
+    C6 --> C4 : resultadoFiltrado
+    C4 -> E1 : actualizar (COMPLETADO, resultado_json)
+    C4 -> B2 : armarTablaYGrafico()
+    B2 --> Actor : Mostrar resultado
+    Actor -> B3 : Exportar PDF/Excel
+    B3 -> C7 : generar()
+    C7 --> Actor : Descargar archivo
+  end
+end
+@enduml
+```
+
+## CU27 - Registrar Empresa Contratante
+
+```plantuml
+@startuml CU27_Secuencia
+title CU27 - Diagrama de Secuencia: Registrar Empresa Contratante
+actor "Administrador de Plataforma" as Actor
+boundary "Formulario Registrar Empresa" as B1
+boundary "Confirmación Registro" as B2
+control "EmpresaController" as C1
+control "EmpresaService" as C2
+control "SuscripcionService" as C3
+entity "Empresa" as E1
+entity "Usuario" as E2
+entity "Role" as E3
+entity "Plan" as E4
+entity "Suscripcion" as E5
+
+Actor -> B1 : Registrar empresa + plan + admin
+B1 -> C1 : POST /plataforma/empresas
+C1 -> C2 : crearEmpresa(datos)
+C2 -> E1 : findByNit(nit)
+alt NIT duplicado
+  E1 --> C2 : EXISTE
+  C2 --> C1 : ERROR
+  C1 --> B1 : "Ya existe una empresa con ese NIT"
+  B1 --> Actor
+else OK
+  C2 -> E4 : findById(plan_id, is_active=true)
+  C2 -> E1 : crear Empresa
+  C2 -> E3 : obtener Role ADMIN_EMPRESA
+  C2 -> E2 : crear Usuario (ADMIN_EMPRESA)
+  C2 -> C3 : crearSuscripcion(empresa_id, plan_id)
+  C3 -> E5 : crear Suscripcion (ACTIVA, +30 días)
+  C2 --> C1 : Empresa creada
+  C1 -> B2 : mostrar datos
+  B2 --> Actor : Confirmación
+end
+@enduml
+```

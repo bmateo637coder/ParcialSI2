@@ -1,0 +1,222 @@
+@startuml FashionStore_Clases_Refinado_2doParcial
+title Diagrama de Clases Refinado - FashionStore SaaS Multitenant + Offline + IA/ML (ICONIX)
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+package "P6 - Plataforma SaaS" {
+  class Empresa {
+    +id: int
+    +razon_social: String
+    +nit: String
+    +is_active: bool
+    +created_at: DateTime
+  }
+
+  class Plan {
+    +id: int
+    +nombre: String
+    +max_sucursales: int
+    +permite_reportes_ia: bool
+    +permite_analitica_ml: bool
+    +precio_mensual: float
+    +is_active: bool
+  }
+
+  class Suscripcion {
+    +id: int
+    +empresa_id: int
+    +plan_id: int
+    +fecha_inicio: Date
+    +fecha_vencimiento: Date
+    +estado: String
+  }
+}
+
+package "P1 - Usuarios" {
+  class Role {
+    +id: int
+    +empresa_id: int
+    +name: String
+  }
+
+  class User {
+    +id: int
+    +empresa_id: int
+    +role_id: int
+    +first_name: String
+    +last_name: String
+    +email: String
+    +hashed_password: String
+    +is_active: bool
+  }
+}
+
+package "P2-P3 - Organización, Catálogo, Comercio" {
+  class Branch {
+    +id: int
+    +empresa_id: int
+    +name: String
+    +city: String
+    +is_active: bool
+  }
+
+  class Product {
+    +id: int
+    +empresa_id: int
+    +provider_id: int
+    +category_id: int
+    +code: String
+    +name: String
+    +price: Numeric
+  }
+
+  class ProductVariant {
+    +id: int
+    +empresa_id: int
+    +product_id: int
+    +sku: String
+    +price: Numeric
+  }
+
+  class Inventory {
+    +id: int
+    +empresa_id: int
+    +branch_id: int
+    +product_id: int
+    +variant_id: int
+    +quantity: int
+  }
+
+  class InventoryMovement {
+    +id: int
+    +empresa_id: int
+    +inventory_id: int
+    +user_id: int
+    +movement_type: String
+    +quantity: int
+  }
+
+  class Order {
+    +id: int
+    +empresa_id: int
+    +branch_id: int
+    +user_id: int
+    +order_number: String
+    +status: String
+    +payment_method: String
+    +total: Numeric
+    +es_offline: bool
+    +origen: String
+  }
+
+  class OrderItem {
+    +id: int
+    +order_id: int
+    +variant_id: int
+    +quantity: int
+    +price: Numeric
+  }
+}
+
+package "P7 - Offline y Sincronización" {
+  class OperacionSync {
+    +id: int
+    +uuid: String
+    +empresa_id: int
+    +sucursal_id: int
+    +usuario_id: int
+    +tipo_operacion: String
+    +payload_json: Text
+    +estado: String
+    +intentos: int
+    +fecha_local: DateTime
+    +fecha_sync: DateTime
+  }
+
+  class ConflictoSync {
+    +id: int
+    +empresa_id: int
+    +operacion_sync_id: int
+    +motivo: Text
+    +stock_disponible: int
+    +cantidad_solicitada: int
+    +resuelto: bool
+    +resuelto_por: int
+    +fecha_resolucion: DateTime
+    +accion_tomada: String
+  }
+
+  class CambioPrenda {
+    +id: int
+    +empresa_id: int
+    +venta_id: int
+    +usuario_id: int
+    +estado: String
+    +fecha_solicitud: DateTime
+  }
+}
+
+package "P8 - IA y ML" {
+  class SolicitudReporteIA {
+    +id: int
+    +empresa_id: int
+    +usuario_id: int
+    +pregunta_natural: Text
+    +tipo_reporte: String
+    +filtros_json: Text
+    +parametros_json: Text
+    +sql_generado_validado: Text
+    +estado: String
+    +resultado_json: Text
+    +archivo_pdf_url: String
+    +archivo_excel_url: String
+    +created_at: DateTime
+  }
+
+  class ModeloML {
+    +id: int
+    +empresa_id: int
+    +nombre: String
+    +tipo: String
+    +algoritmo: String
+    +archivo_joblib: String
+    +metricas_json: Text
+    +estado: String
+    +fecha_entrenamiento: DateTime
+  }
+}
+
+Empresa "1" -- "*" Branch
+Empresa "1" -- "*" User
+Empresa "1" -- "*" Role
+Empresa "1" -- "1" Suscripcion
+Plan "1" -- "*" Suscripcion
+
+Branch "1" -- "*" Inventory
+Product "1" -- "*" ProductVariant
+ProductVariant "1" -- "*" Inventory
+Inventory "1" -- "*" InventoryMovement
+Order "1" -- "*" OrderItem
+Order "1" -- "*" OperacionSync
+OperacionSync "1" -- "0..1" ConflictoSync
+Order "1" -- "*" CambioPrenda
+User "1" -- "*" SolicitudReporteIA
+Empresa "1" -- "*" ModeloML
+Empresa "1" -- "*" OperacionSync
+
+note right of Empresa
+  Aislamiento por empresa_id
+  Todo filtrado en backend
+end note
+
+note right of OperacionSync
+  uuid UNIQUE
+  estados: REGISTRADA_LOCAL|ENVIADA|CONFIRMADA|RECHAZADA|EN_CONFLICTO
+end note
+
+note right of SolicitudReporteIA
+  IA solo recibe parámetros validados
+  Filtrado SIEMPRE por empresa_id
+  Requiere plan Profesional
+end note
+@enduml

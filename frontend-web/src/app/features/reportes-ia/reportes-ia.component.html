@@ -1,0 +1,20 @@
+<section style="padding: 1.5rem;">
+  <h2>Reportes con Lenguaje Natural (IA)</h2>
+  <p>Requiere plan Profesional</p>
+
+  <div>
+    <input [(ngModel)]="pregunta" placeholder="Ej: Ventas del mes por sucursal" style="width: 400px; padding: 0.5rem;" />
+    <button (click)="generar()" [disabled]="cargando || !pregunta">Generar reporte</button>
+  </div>
+
+  <p style="color: red;" *ngIf="error">{{ error }}</p>
+  <p *ngIf="cargando">Procesando...</p>
+
+  <div *ngIf="resultado">
+    <h3>{{ resultado.tipo_reporte }}</h3>
+    <p>{{ resultado.mensaje }}</p>
+    <button (click)="exportar('pdf')">Exportar PDF</button>
+    <button (click)="exportar('excel')">Exportar Excel</button>
+    <pre>{{ resultado | json }}</pre>
+  </div>
+</section>

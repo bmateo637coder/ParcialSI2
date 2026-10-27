@@ -33,6 +33,46 @@ const SIZE_PRESETS = [
   { name: 'XL', scale: 130 },
 ];
 
+/**
+ * Caja de referencia de la prenda. El contorno (GARMENT_PATH) esta definido en
+ * este espacio de coordenadas y se reutiliza tal cual en dos lugares:
+ *   1. `clip-path: path(...)` del CSS (recorte en pantalla).
+ *   2. `traceGarment()` del canvas (recorte de la foto capturada).
+ * Ambos deben usar EXACTAMENTE la misma constante o la foto guardada no coincide
+ * con lo que el usuario ve.
+ */
+export const GARMENT_BOX = { w: 210, h: 250 };
+
+/**
+ * Puntos de referencia de GARMENT_PATH que usa el auto-ancla para colocar la prenda
+ * sobre el cuerpo con exactitud geometrica (en vez de un factor aproximado):
+ *  - `GARMENT_SHOULDER_SPAN`: separacion entre los hombros de la silueta (x 40 -> 170).
+ *  - `GARMENT_NECK_Y`: altura de la linea de hombros en el centro de la prenda.
+ */
+export const GARMENT_SHOULDER_SPAN = 130;
+export const GARMENT_NECK_Y = 20;
+
+/**
+ * Silueta de remera trazada con curvas (cuello, hombros, mangas y bajo redondeados)
+ * en lugar de un poligono de vertices rectos: el recorte sigue el contorno real
+ * de la prenda y no la corta en escalones.
+ * Coordenadas en px dentro de GARMENT_BOX (210 x 250).
+ */
+export const GARMENT_PATH =
+  'M 74 6 ' +
+  'C 88 25 122 25 136 6 ' +
+  'L 170 20 ' +
+  'C 187 26 200 34 206 46 ' +
+  'L 206 92 ' +
+  'C 196 99 184 101 172 100 ' +
+  'L 170 236 ' +
+  'Q 105 245 40 236 ' +
+  'L 38 100 ' +
+  'C 26 101 14 99 4 92 ' +
+  'L 4 46 ' +
+  'C 10 34 23 26 40 20 ' +
+  'Z';
+
 const POSE_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
 
 const SILHOUETTE_SVG = `
@@ -72,7 +112,8 @@ const SILHOUETTE_SVG = `
         <span class="mode-tag">Silueta demo (sin cámara)</span>
       </div>
 
-      <div class="stage-frame" *ngIf="!capturing" [style.transform]="overlayTransform">
+      <div class="stage-frame" *ngIf="!capturing" [style.transform]="overlayTransform"
+        [style.--crop-x]="cropX + '%'" [style.--crop-y]="cropY + '%'">
         <div class="tint" [hidden]="!activeTint.hex" [style.background]="activeTint.hex"></div>
         <span class="frame-tint-label" *ngIf="activeTint.hex">{{ activeTint.name }}</span>
         <img [src]="overlayImgSrc" [alt]="product!.name" [style.opacity]="opacityPct" [style.transform]="flip ? 'scaleX(-1)' : 'none'"
@@ -138,6 +179,18 @@ const SILHOUETTE_SVG = `
         <input type="range" min="20" max="100" [(ngModel)]="opacity">
       </label>
 
+      <div class="group crop-group">
+        <span class="group-label">Encuadre del recorte</span>
+        <label class="slider-row">Foto ↔ <span class="slider-val">{{ cropX }}%</span>
+          <input type="range" min="0" max="100" [(ngModel)]="cropX">
+        </label>
+        <label class="slider-row">Foto ↕ <span class="slider-val">{{ cropY }}%</span>
+          <input type="range" min="0" max="100" [(ngModel)]="cropY">
+        </label>
+        <button class="btn btn-outline btn-sm" type="button" (click)="resetCrop()">Centrar recorte</button>
+        <p class="form-hint">Ajusta hasta que la prenda de la foto encaje con el contorno. El recorte se aplica igual a la foto que descargas.</p>
+      </div>
+
       <p class="form-hint" style="margin-top:.35rem;">Consejo: también puedes arrastrar la prenda con el mouse sobre el lienzo. Con Auto-ancla activo, la prenda sigue a tus hombros.</p>
 
       <div class="controls-actions">
@@ -165,11 +218,12 @@ const SILHOUETTE_SVG = `
     .mode-demo { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 1rem; color:#cbd5e1; }
     .mode-demo .silhouette { height: 100%; filter: brightness(.85); }
     .mode-tag { position: absolute; top: .75rem; left: .75rem; background: rgba(0,0,0,.55); color:#fff; font-size:.72rem; padding:.3rem .6rem; border-radius: 999px; }
-    .stage-frame { position: absolute; left: 50%; top: 50%; width: 210px; will-change: transform; pointer-events: none;
-      clip-path: polygon(26% 0%, 40% 6%, 60% 6%, 74% 0%, 100% 0%, 100% 18%, 86% 24%, 86% 78%, 100% 84%, 100% 100%,
-        0% 100%, 0% 84%, 14% 78%, 14% 24%, 0% 18%, 0% 0%);
+    .stage-frame { position: absolute; left: 50%; top: 50%; width: 210px; aspect-ratio: 210 / 250;
+      will-change: transform; pointer-events: none;
+      clip-path: path('M 74 6 C 88 25 122 25 136 6 L 170 20 C 187 26 200 34 206 46 L 206 92 C 196 99 184 101 172 100 L 170 236 Q 105 245 40 236 L 38 100 C 26 101 14 99 4 92 L 4 46 C 10 34 23 26 40 20 Z');
       filter: drop-shadow(0 12px 18px rgba(0,0,0,.4)); }
-    .stage-frame img { width: 100%; display: block; }
+    .stage-frame img { width: 100%; height: 100%; display: block; object-fit: cover;
+      object-position: var(--crop-x, 50%) var(--crop-y, 30%); }
     .tint { position: absolute; inset: -1px; pointer-events: none; mix-blend-mode: color; opacity: .72; }
     .frame-tint-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       text-shadow: 0 1px 3px rgba(0,0,0,.7); color: #fff; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
@@ -219,6 +273,8 @@ export class VestidorComponent implements OnInit, OnDestroy {
   opacity = 100;
   flip = false;
   autoFit = true;
+  cropX = 50;
+  cropY = 30;
   selectedSize = 'M';
   activeTint = TINTS[0];
 
@@ -323,10 +379,11 @@ export class VestidorComponent implements OnInit, OnDestroy {
     this.mode = 'demo';
     this.streaming = false;
     this.camError = '';
-    this.resetCrop();
+    this.resetAnchor();
   }
 
-  private resetCrop(): void {
+  /** Reinicia el auto-ancla a una pose neutra (se usa al (re)iniciar la camara). */
+  private resetAnchor(): void {
     this.anchorUpdate = { x: 0, y: 35, fit: 1 };
   }
 
@@ -431,11 +488,21 @@ export class VestidorComponent implements OnInit, OnDestroy {
     const cx = (1 - (left.x + right.x) / 2) * w;
     const cy = (left.y + right.y) / 2 * h;
     const shoulderW = Math.max(180, Math.abs(left.x - right.x) * w);
+    // Escala exacta: la separacion de hombros de la silueta debe coincidir con la
+    // detectada, en lugar de dividir por un valor aproximado.
+    const fit = Math.min(3, Math.max(0.2, shoulderW / GARMENT_SHOULDER_SPAN));
     const anchorDx = cx - w / 2;
-    const anchorDy = cy - h * 0.42;
-    const fit = shoulderW / 300;
+    // Alineamos el punto de cuello de la prenda (105, GARMENT_NECK_Y) con el punto
+    // medio de los hombros detectado. El centro del marco esta a GARMENT_BOX.h/2 del
+    // borde superior, por eso el compensado vertical es (h/2 - neckY) * fit.
+    const neckToCenter = (GARMENT_BOX.h / 2 - GARMENT_NECK_Y) * fit;
+    const anchorDy = cy + neckToCenter - h / 2;
     this.ngZone.run(() => {
-      this.anchorUpdate = { x: anchorDx, y: Math.max(-h, Math.min(h, anchorDy)), fit: Math.min(3, fit) };
+      this.anchorUpdate = {
+        x: anchorDx,
+        y: Math.max(-h, Math.min(h, anchorDy)),
+        fit,
+      };
     });
   }
 
@@ -563,36 +630,50 @@ export class VestidorComponent implements OnInit, OnDestroy {
     const dy = (this.offsetY || 0) + (this.autoFit && this.anchorUpdate ? this.anchorUpdate.y : 0);
     ctx.translate(dx, dy);
     ctx.globalAlpha = this.opacityPct;
-    const iw = 210;
-    const ih = iw * (img.height / Math.max(1, img.width));
-    this.traceGarment(ctx, iw, ih);
-    ctx.clip();
-    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
+    // Mismo recorte que en pantalla: silueta GARMENT_PATH + object-fit: cover.
+    const bw = GARMENT_BOX.w;
+    const bh = GARMENT_BOX.h;
+    // Pasamos el contexto al espacio de coordenadas de la caja (origen = esquina
+    // superior izquierda de la silueta) para poder recortar con Path2D.
+    ctx.translate(-bw / 2, -bh / 2);
+    this.traceGarment(ctx);
+    const srcW = Math.max(1, img.naturalWidth || img.width);
+    const srcH = Math.max(1, img.naturalHeight || img.height);
+    // `cover`: escala la foto para llenar la caja y recorta el sobrante.
+    const scale = Math.max(bw / srcW, bh / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
+    // object-position: (%) posiciona el punto de corte dentro del excedente.
+    const slackX = Math.max(0, dw - bw);
+    const slackY = Math.max(0, dh - bh);
+    const imgDx = slackX * (this.cropX / 100);
+    const imgDy = slackY * (this.cropY / 100);
+    ctx.drawImage(img, imgDx, imgDy, dw, dh);
     const tint = this.tintColor;
     if (tint) {
       ctx.globalCompositeOperation = 'color';
       ctx.globalAlpha = this.opacityPct * 0.6;
       ctx.fillStyle = tint;
-      ctx.fillRect(-iw / 2, -ih / 2, iw, ih);
+      ctx.fillRect(0, 0, bw, bh);
       ctx.globalCompositeOperation = 'source-over';
     }
     ctx.restore();
   }
 
-  private traceGarment(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    // T-shirt silhouette (coincide con el clip-path del CSS).
-    const p = (x: number, y: number) => [(-w / 2) + (x / 100) * w, (-h / 2) + (y / 100) * h];
-    const pts: Array<[number, number]> = [
-      [26, 0], [40, 6], [60, 6], [74, 0], [100, 0], [100, 18], [86, 24], [86, 78],
-      [100, 84], [100, 100], [0, 100], [0, 84], [14, 78], [14, 24], [0, 18], [0, 0],
-    ];
+  resetCrop(): void {
+    this.cropX = 50;
+    this.cropY = 30;
+  }
+
+  /**
+   * Recorta el lienzo con la silueta de la prenda. Usa la MISMA constante
+   * (GARMENT_PATH) que el `clip-path` del CSS, de modo que la foto descargada
+   * queda recortada exactamente como se ve en pantalla. El contexto debe estar
+   * mapeado al espacio de GARMENT_BOX (ver paintOverlay).
+   */
+  private traceGarment(ctx: CanvasRenderingContext2D): void {
     ctx.beginPath();
-    pts.forEach(([x, y], i) => {
-      const [px, py] = p(x, y);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    });
-    ctx.closePath();
+    ctx.clip(new Path2D(GARMENT_PATH));
   }
 
   private snapshot(canvas: HTMLCanvasElement): void {

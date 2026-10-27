@@ -1,0 +1,633 @@
+================================================================================
+DIAGRAMAS DE SECUENCIA SIMPLIFICADOS - CICLO 2 Y CICLO 3
+Fashion Store (Sistemas II) - Codigos PlantUML para draw.io
+================================================================================
+Archivo      : diagramas-plantuml-ciclo2-ciclo3-simple.txt
+Codificacion : UTF-8
+Base normativ: UML2.5.pdf, "Diagrama de secuencia" (pag. 48-52)
+Alcance      : CICLO#2 (9 casos de uso) + CICLO#3 (7 casos de uso) = 16 diagramas
+Proposito    : version resumida, pensada para que el diagrama se lea bien
+               cuando lo capturas y lo pegas en el documento.
+
+
+--------------------------------------------------------------------------------
+1. QUE SE SIMPLIFICO Y POR QUE
+--------------------------------------------------------------------------------
+Estos diagramas son la version CORTA. La version completa, con validaciones,
+bucles, notificaciones y todos los pasos, esta en:
+        diagramas-plantuml-uml2.5.txt  (CU1 a CU26)
+Usa esa version si el profesor pide el detalle paso a paso. Usa esta version para
+el cuerpo del documento, donde un diagrama con 8 objetos y 30 mensajes ya no se
+entiende en una pagina.
+
+Criterio de simplificacion aplicado a los 16 diagramas:
+
+  * 3 a 5 participantes por diagrama (actor, interfaz, controlador, base de
+    datos). Las clases de dominio se agrupan dentro del controlador, salvo las
+    entidades indispensablemente nombradas (Reservation, Order, Inventory,
+    PasarelaPago), porque ahi la entidad ES el objeto del caso de uso.
+  * 4 a 8 mensajes por diagrama: solo los metodos importantes.
+  * Un solo fragmento combinador por diagrama (alt u opt) y solo cuando aporta
+    informacion. Se eliminaron los par, los grupos anidados y los bucles
+    repetidos.
+  * Se conserva la notacion UML 2.5 exigida: lifeline = objeto unico, tiempo de
+    arriba hacia abajo, mensaje sincronico con flecha continua (->), respuesta
+    con flecha discontinua (-->), foco de control (activate/deactivate) y
+    creacion de objetos (create).
+  * Los nombres de los metodos y de las rutas SIEMPRE son los reales del codigo.
+
+
+--------------------------------------------------------------------------------
+2. PARTICIPANTES Y ESTEREOTIPOS
+--------------------------------------------------------------------------------
+  <<actor>>     Persona o sistema externo.
+  <<boundary>>  Pantalla o formulario (Angular / Flutter).
+  <<control>>   Controlador o servicio (FastAPI).
+  <<database>>  Base de datos.
+  <<entity>>    Entidad de dominio, solo cuando el caso de uso gira sobre ella.
+
+  Sufijo de instancia: "o1", "r1", "v1" identifican la instancia concreta, para
+  cumplir la regla de que cada lifeline representa UNA sola instancia.
+
+
+--------------------------------------------------------------------------------
+3. COMO PEGAR EN DRAW.IO
+--------------------------------------------------------------------------------
+  1. Arrange > Insert > Advanced > PlantUML...  (Insertar > Avanzado > PlantUML)
+  2. Copia UN bloque completo, desde su linea de inicio hasta la de cierre.
+  3. Pegalo y acepta.
+  Los nombres de los menus cambian segun idioma y version; si no aparece la
+  opcion PlantUML, genera la imagen en plantuml.com y insertala con
+  Insert > Image.
+
+
+================================================================================
+########                  CICLO 2                     ############
+================================================================================
+
+================================================================================
+CICLO#2 - CU4  Gestionar usuarios y roles   (Administrador)
+================================================================================
+@startuml CU4_GestionarUsuariosRoles
+title CU4 - Gestionar usuarios y roles
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "UsuariosComponent\n(Angular)" as UI <<boundary>>
+control "UsersController\n/api/users" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+ADM -> UI : abre la seccion Usuarios
+activate UI
+UI -> C : GET /api/users + /api/users/roles
+activate C
+C -> BD : SELECT usuarios JOIN roles
+BD --> C : lista de usuarios y roles
+C --> UI : 200 OK
+deactivate C
+UI --> ADM : muestra la tabla de usuarios
+opt crear un usuario
+  ADM -> UI : completa nombre, email y rol
+  UI -> C : POST /api/users
+  C -> BD : INSERT users
+  BD --> C : ok
+  C --> UI : 201 Created
+end
+deactivate UI
+note right of C
+  require_admin: si el rol no es
+  Administrador responde 403.
+end note
+@enduml
+
+
+================================================================================
+CICLO#2 - CU8  Gestionar temporadas y colecciones   (Administrador)
+================================================================================
+@startuml CU8_TemporadasColecciones
+title CU8 - Gestionar temporadas y colecciones
+autonumber
+actor "Administrador" as ADM <<actor>>
+boundary "TemporadasComponent\n(Angular)" as UI <<boundary>>
+control "ProductsController\n/api/products/metadata" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+ADM -> UI : abre Temporadas y Colecciones
+activate UI
+UI -> C : GET /api/products/metadata/seasons
+activate C
+C -> BD : SELECT seasons
+BD --> C : lista de temporadas
+C --> UI : 200 OK
+deactivate C
+UI --> ADM : muestra la tabla
+opt registrar una temporada
+  ADM -> UI : nueva temporada(nombre, anio, fechas)
+  UI -> C : POST /api/products/metadata/seasons
+  C -> BD : INSERT seasons
+  BD --> C : ok
+  C --> UI : 201 Created
+end
+deactivate UI
+@enduml
+
+
+================================================================================
+CICLO#2 - CU9  Gestionar proveedores   (Proveedor y Administrador)
+================================================================================
+@startuml CU9_GestionarProveedores
+title CU9 - Gestionar proveedores
+autonumber
+actor "Proveedor" as PRV <<actor>>
+actor "Administrador" as ADM <<actor>>
+boundary "PortalComponent\n(Angular)" as UI <<boundary>>
+control "ProvidersController\n/api/providers" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+PRV -> UI : publica un producto
+activate UI
+UI -> C : POST /api/providers/products(propuesta)
+C -> BD : INSERT proposals (estado PENDIENTE)
+BD --> C : ok
+C --> UI : 201 Created
+deactivate UI
+
+ADM -> UI : revisa las propuestas recibidas
+activate UI
+UI -> C : PATCH /api/providers/proposals/{id}/approve
+activate C
+C -> BD : UPDATE proposals + INSERT products
+BD --> C : ok
+C --> UI : 200 OK (propuesta aprobada)
+deactivate C
+UI --> ADM : el producto queda en el catalogo
+deactivate UI
+note right of C
+  Si se rechaza: PATCH .../reject y el
+  producto no se crea.
+end note
+@enduml
+
+
+================================================================================
+CICLO#2 - CU11  Consultar disponibilidad por sucursal   (Cliente)
+================================================================================
+@startuml CU11_ConsultarDisponibilidad
+title CU11 - Consultar disponibilidad por sucursal
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "DetalleProducto\n(Angular / Flutter)" as UI <<boundary>>
+control "InventoryController\n/api/inventory/availability" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : abre el detalle de la prenda
+activate UI
+UI -> C : GET /api/inventory/availability?variant_id=v1
+activate C
+C -> BD : SELECT inventory JOIN branches\nWHERE variant_id = v1
+BD --> C : existencias por sucursal
+alt sin existencias
+  C --> UI : 200 OK (lista vacia)
+else con existencias
+  C --> UI : 200 OK (disponibilidad por sucursal)
+end
+deactivate C
+UI --> CLI : muestra donde hay prenda y cuanta
+deactivate UI
+@enduml
+
+
+================================================================================
+CICLO#2 - CU13  Reservar prendas   (Cliente)
+================================================================================
+@startuml CU13_ReservarPrendas
+title CU13 - Reservar prendas
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "ReservasComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "CommerceController\nPOST /api/reservations" as C <<control>>
+entity "Reservation : r1" as R <<entity>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : elige sucursal, prendas y horas
+activate UI
+UI -> C : POST /api/reservations(branch, items, expiration_hours)
+activate C
+create entity "Reservation : r1" as R <<entity>>
+C -> R : crea(codigo RSV-..., estado PENDIENTE, vencimiento)
+activate R
+C -> BD : SELECT inventory (bloquea fila para reservar)
+BD --> C : available por prenda
+alt stock insuficiente
+  C --> UI : 409 "Stock insuficiente"
+else stock suficiente
+  C -> BD : INSERT reservations + items + stock_movements
+  BD --> C : ok
+  R --> C : reserva confirmada
+  C --> UI : 201 Created (codigo y vencimiento)
+end
+deactivate C
+deactivate R
+deactivate UI
+note right of R
+  La reserva RETIENE stock con un
+  movimiento; todavia no lo descuenta.
+end note
+@enduml
+
+
+================================================================================
+CICLO#2 - CU14  Gestionar reserva: consultar y cancelar   (Cliente)
+================================================================================
+@startuml CU14_GestionarReserva
+title CU14 - Gestionar reserva (consultar / cancelar)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "MisReservasComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "CommerceController\n/api/reservations" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : abre Mis reservas
+activate UI
+UI -> C : GET /api/reservations
+activate C
+C -> BD : SELECT reservas del cliente
+BD --> C : lista con estado y vencimiento
+C --> UI : 200 OK
+deactivate C
+UI --> CLI : tabla de sus reservas
+opt cancelar una reserva pendiente
+  CLI -> UI : pulsa Cancelar
+  UI -> C : PATCH /api/reservations/{id}/cancel
+  activate C
+  C -> BD : UPDATE reservas (CANCELADA)\n+ liberar stock reservado
+  BD --> C : ok
+  C --> UI : 200 OK
+  deactivate C
+  UI --> CLI : reserva cancelada
+end
+deactivate UI
+@enduml
+
+
+================================================================================
+CICLO#2 - CU15  Atender reserva en sucursal   (Encargado o Cajero)
+================================================================================
+@startuml CU15_AtenderReserva
+title CU15 - Atender reserva en sucursal
+autonumber
+actor "Encargado de Sucursal" as ENC <<actor>>
+boundary "SucursalComponent\n(Angular - panel de tienda)" as UI <<boundary>>
+control "CommerceController\nPATCH /api/reservations/{id}/attend" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+ENC -> UI : toma el codigo de la reserva
+activate UI
+UI -> C : PATCH /api/reservations/{id}/attend
+activate C
+C -> BD : SELECT reserva
+BD --> C : estado y fecha de vencimiento
+alt no es personal autorizado
+  C --> UI : 403 "Requiere personal de sucursal"
+else reserva vencida o ya atendida
+  C --> UI : 400 "Solo reservas pendientes vigentes"
+else entrega válida
+  C -> BD : UPDATE reservas (ATENDIDA, fecha)\n+ INSERT notifications
+  BD --> C : ok
+  C --> UI : 200 OK
+end
+deactivate C
+UI --> ENC : confirma la entrega al cliente
+deactivate UI
+note right of C
+  require_staff: solo Administrador,
+  Encargado de Sucursal o Cajero.
+end note
+@enduml
+
+
+================================================================================
+CICLO#2 - CU16  Gestionar carrito de compras   (Cliente)
+================================================================================
+@startuml CU16_GestionarCarrito
+title CU16 - Gestionar carrito de compras
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CarritoComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "CommerceController\n/api/cart" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : abre el carrito
+activate UI
+UI -> C : GET /api/cart
+activate C
+C -> BD : SELECT cart_items + variantes
+BD --> C : prendas, cantidades y precios
+C --> UI : 200 OK (CartSummary con total)
+deactivate C
+UI --> CLI : lista de prendas y total
+opt agregar una prenda
+  CLI -> UI : pulsa Agregar al carrito
+  UI -> C : POST /api/cart(variant_id, quantity)
+  activate C
+  C -> BD : valida stock e INSERT cart_items
+  BD --> C : ok
+  C --> UI : 201 Created
+  deactivate C
+  UI --> CLI : prenda agregada
+end
+deactivate UI
+note right of C
+  Editar cantidad: PATCH /api/cart/{item_id}
+  Quitar prenda: DELETE /api/cart/{item_id}
+end note
+@enduml
+
+
+================================================================================
+CICLO#2 - CU21  Gestionar movimientos de inventario   (Encargado o Administrador)
+================================================================================
+@startuml CU21_GestionarMovimientos
+title CU21 - Gestionar movimientos de inventario
+autonumber
+actor "Encargado de Sucursal" as ENC <<actor>>
+boundary "InventarioComponent\n(Angular)" as UI <<boundary>>
+control "InventoryController\n/api/inventory" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+ENC -> UI : abre el Inventario de su sucursal
+activate UI
+UI -> C : GET /api/inventory?branch_id=b1
+activate C
+C -> BD : SELECT inventory WHERE branch_id = b1
+BD --> C : existencias
+C --> UI : 200 OK
+deactivate C
+UI --> ENC : tabla de existencias
+opt registrar una entrada o ajuste
+  ENC -> UI : nueva entrada(producto, cantidad, motivo)
+  UI -> C : POST /api/inventory/movements
+  activate C
+  C -> BD : UPDATE inventory + INSERT stock_movements
+  BD --> C : ok
+  C --> UI : 201 Created
+  deactivate C
+  UI --> ENC : movimiento registrado
+end
+deactivate UI
+@enduml
+
+
+================================================================================
+########                  CICLO 3                     ############
+================================================================================
+
+================================================================================
+CICLO#3 - CU12  Usar vestidor virtual (AR)   (Cliente)
+================================================================================
+@startuml CU12_VestidorAR
+title CU12 - Usar vestidor virtual (AR)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "VestidorComponent\n(Angular)" as UI <<boundary>>
+control "MediaPipe\nPoseLandmarker" as MP <<control>>
+entity "Canvas de la silueta\n(210 x 250)" as CV <<entity>>
+
+CLI -> UI : elige la prenda y autoriza la camara
+activate UI
+UI -> MP : detectForVideo(frame)
+activate MP
+MP --> UI : onResults(landmarks de hombros y caderas)
+deactivate MP
+UI -> UI : fit = hombro / GARMENT_SHOULDER_SPAN
+UI -> CV : paintOverlay(translate, Path2D(GARMENT_PATH))
+activate CV
+CV --> UI : silueta dibujada sobre la imagen
+deactivate CV
+UI --> CLI : muestra la prenda superpuesta
+opt capturar la prueba
+  CLI -> UI : pulsa Capturar
+  UI -> CV : toDataURL(png)
+  CV --> UI : imagen en base64
+end
+deactivate UI
+note right of MP
+  Todo el reconocimiento ocurre en el
+  navegador; no consume la API.
+end note
+@enduml
+
+
+================================================================================
+CICLO#3 - CU17  Confirmar compra digital   (Cliente)
+================================================================================
+@startuml CU17_ConfirmarCompraDigital
+title CU17 - Confirmar compra digital
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CheckoutComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "CommerceController\nPOST /api/orders/checkout" as C <<control>>
+entity "Order : o1" as O <<entity>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : confirma el pedido y paga
+activate UI
+UI -> C : POST /api/orders/checkout(metodo, sucursal)
+activate C
+C -> BD : SELECT carrito + valida stock y promociones
+BD --> C : items, precios y descuentos
+alt carrito vacio
+  C --> UI : 400 "El carrito esta vacio"
+else carrito con productos
+  create entity "Order : o1" as O <<entity>>
+  C -> O : crea(estado PENDIENTE, total calculado)
+  activate O
+  C -> BD : INSERT orders + order_items; DELETE cart_items
+  BD --> C : ok
+  C -> C : CU19 _process_payment(orden, metodo, tarjeta)
+  C --> UI : 201 Created (numero de pedido)
+  deactivate O
+end
+deactivate C
+UI --> CLI : muestra el comprobante
+deactivate UI
+note right of O
+  El stock se descuenta al CONFIRMAR
+  el pago, no aqui (ver CU19 y CU20).
+end note
+@enduml
+
+
+================================================================================
+CICLO#3 - CU18  Registrar venta presencial   (Cajero)
+================================================================================
+@startuml CU18_RegistrarVentaPresencial
+title CU18 - Registrar venta presencial (punto de venta)
+autonumber
+actor "Cajero" as CAJ <<actor>>
+boundary "POSComponent\n(Angular - punto de venta)" as UI <<boundary>>
+control "CommerceController\nPOST /api/pos/sale" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CAJ -> UI : elige prendas y cobra en efectivo
+activate UI
+UI -> C : POST /api/pos/sale(items, branch_id, EFECTIVO)
+activate C
+C -> BD : SELECT inventario de la sucursal
+BD --> C : existencias
+C -> BD : INSERT orders + order_items
+C -> C : CU19 _process_payment(EFECTIVO) -> CU20 _deduct_order_stock
+C -> BD : UPDATE inventario, movimientos y status PAGADO
+BD --> C : ok
+C --> UI : 200 OK (venta registrada)
+deactivate C
+UI --> CAJ : imprime el comprobante
+deactivate UI
+@enduml
+
+
+================================================================================
+CICLO#3 - CU19  Procesar pago electronico   (Cliente y pasarela de pago)
+================================================================================
+@startuml CU19_ProcesarPago
+title CU19 - Procesar pago electronico
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "CheckoutComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "CommerceController\n/api/orders/{id}/pay" as C <<control>>
+control "Pasarela de pago\n(SandboxPaymentGateway)" as G <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : paga el pedido pendiente
+activate UI
+UI -> C : POST /api/orders/{id}/pay(metodo, tarjeta)
+activate C
+C -> G : charge(monto, metodo, tarjeta)
+activate G
+G --> C : GatewayResult(approved o declined)
+deactivate G
+alt pago aceptado
+  C -> BD : UPDATE pago COMPLETADO + descontar stock
+  BD --> C : ok
+  C --> UI : 200 OK (pedido pagado)
+else pago rechazado
+  C -> BD : UPDATE pago FALLIDO (sin descontar stock)
+  BD --> C : ok
+  C --> UI : 200 OK (pedido pendiente, puede reintentar)
+end
+deactivate C
+UI --> CLI : resultado del pago
+deactivate UI
+note right of G
+  Nunca se descuenta stock con un
+  pago rechazado. Sandbox: es el
+  entorno de pruebas del proyecto.
+end note
+@enduml
+
+
+================================================================================
+CICLO#3 - CU20  Actualizar inventario automaticamente   (Sistema)
+================================================================================
+@startuml CU20_ActualizarInventario
+title CU20 - Actualizar inventario automaticamente
+autonumber
+control "Sistema\n_complete_order_sale" as S <<control>>
+entity "Inventory : inv1" as INV <<entity>>
+database "Base de datos" as BD <<database>>
+
+note over S
+  No es una accion del usuario: el sistema
+  la ejecuta al confirmar el pago (CU19) o
+  la venta presencial (CU18).
+end note
+
+S -> BD : SELECT order_items de la orden o1
+BD --> S : prendas y cantidades vendidas
+S -> INV : descuenta available
+activate INV
+INV --> S : nuevo stock disponible
+deactivate INV
+S -> BD : UPDATE inventory + INSERT stock_movements
+BD --> S : ok
+S -> BD : UPDATE orders SET status = PAGADO
+BD --> S : ok
+S --> S : COMMIT
+@enduml
+
+
+================================================================================
+CICLO#3 - CU22  Recomendar prendas (IA)   (Cliente)
+================================================================================
+@startuml CU22_RecomendarPrendas
+title CU22 - Recomendar prendas (IA)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "RecomendadosComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "AssistantController\nGET /api/recommendations" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : abre Recomendados para ti
+activate UI
+UI -> C : GET /api/recommendations?limit=8
+activate C
+C -> BD : SELECT historial de compras del usuario
+BD --> C : categorias y prendas que ya compro
+C -> BD : SELECT productos candidatos
+BD --> C : catalogo para comparar
+C -> C : recommend() puntua coincidencias
+C --> UI : 200 OK (prendas recomendadas con motivo)
+deactivate C
+UI --> CLI : muestra las tarjetas de prendas
+deactivate UI
+note right of C
+  Si el usuario no tiene historial,
+  recommend() devuelve los destacados.
+end note
+@enduml
+
+
+================================================================================
+CICLO#3 - CU23  Consultar asistente virtual (chatbot)   (Cliente)
+================================================================================
+@startuml CU23_AsistenteVirtual
+title CU23 - Consultar asistente virtual (chatbot)
+autonumber
+actor "Cliente" as CLI <<actor>>
+boundary "ChatComponent\n(Angular / Flutter)" as UI <<boundary>>
+control "AssistantController\nPOST /api/assistant/chat" as C <<control>>
+database "Base de datos" as BD <<database>>
+
+CLI -> UI : escribe su pregunta
+activate UI
+UI -> C : POST /api/assistant/chat(mensaje, conversation_id?)
+activate C
+C -> C : generate_answer() detecta la intencion
+C -> BD : SELECT productos, stock e historial
+BD --> C : datos para responder
+C -> BD : INSERT chat_messages (pregunta y respuesta)
+BD --> C : ok
+C --> UI : 200 OK (respuesta del asistente)
+deactivate C
+UI --> CLI : muestra la respuesta en el chat
+deactivate UI
+note right of C
+  Intenciones: consulta de stock, de
+  prenda, de sucursales y de su ultimo
+  pedido.
+end note
+@enduml
+
+
+================================================================================
+CHECKLIST ANTES DE ENTREGAR
+================================================================================
+[ ] Los 9 diagramas de CICLO#2 (CU4, CU8, CU9, CU11, CU13, CU14, CU15, CU16,
+    CU21) y los 7 de CICLO#3 (CU12, CU17, CU18, CU19, CU20, CU22, CU23) estan
+    completos y pegados en el documento.
+[ ] Cada diagrama tiene entre 3 y 5 participantes y se lee de un vistazo.
+[ ] Los titulos coinciden con el nombre del caso de uso en el PUDS.
+[ ] Los mensajes usan rutas y funciones reales del codigo.
+[ ] Las respuestas usan flecha discontinua (-->) y el foco de control aparece
+    con activate / deactivate.
+[ ] Si el profesor pide el detalle completo, se sustituye por el bloque
+    equivalente de diagramas-plantuml-uml2.5.txt.
