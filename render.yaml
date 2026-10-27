@@ -24,10 +24,12 @@ services:
       - key: GENAI_API_KEY
         sync: false
 
-  - type: static_site
+  - type: web
     name: fashionstore-web-si2
+    env: static
+    plan: free
     rootDir: frontend-web
-    buildCommand: npm ci && npx ng build --configuration production
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist/frontend-web/browser
     routes:
       - type: rewrite
