@@ -1,0 +1,33 @@
+{
+  "resultado": "OK",
+  "entorno": "Simulación de la API COM; no se ejecutó dentro de un repositorio de Enterprise Architect.",
+  "sintaxisJScriptWindows": true,
+  "sha256": "695107f5921bd28099e385354558a9105f82989f2a20af5ec5b479b57335fd52",
+  "diagramas": 89,
+  "casos": 16,
+  "robustez": 16,
+  "secuencias": 32,
+  "modelo": {
+    "packages": 66,
+    "elements": 506,
+    "connectors": 807,
+    "diagrams": 89,
+    "placements": 774,
+    "attributes": 357,
+    "methods": 211,
+    "tags": 120
+  },
+  "comprobaciones": [
+    "sintaxis",
+    "numeración exclusiva CU1-CU16",
+    "colecciones COM con Refresh",
+    "referencias de entidades",
+    "reglas de robustez ICONIX",
+    "extremos y multiplicidades",
+    "orden de mensajes",
+    "repetición idempotente",
+    "rango parcial",
+    "restauración tras error",
+    "protección de paquetes ajenos"
+  ]
+}

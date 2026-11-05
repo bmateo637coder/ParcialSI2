@@ -1,12 +1,14 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, throwError, from, firstValueFrom, mergeMap, of } from 'rxjs';
+import { offlineScope, cacheOfflineResponse, readOfflineResponse } from './core/offline/offline-db.service';
 import { catchError, tap, timeout } from 'rxjs/operators';
 import { environment } from '../environments/environment';
 import { ToastService } from './toast.service';
 
 export interface User {
   id: number;
+  empresa_id?: number | null;
   first_name: string;
   last_name: string;
   email: string;
@@ -170,12 +172,21 @@ export interface PaymentBrief {
   method: string;
   amount: number;
   status: string;
+  cash_received?: number | null;
+  change_amount?: number;
   stripe_payment_id?: string | null;
   created_at?: string | null;
   paid_at?: string | null;
 }
 
 export interface Order {
+  stock_deducted: boolean;
+  collected_total: number;
+  refunded_total: number;
+  refund_pending: number;
+  net_total: number;
+  refunds: Refund[];
+  returnable_items: ReturnableItem[];
   id: number;
   client_id: number;
   client_name?: string | null;
@@ -191,6 +202,10 @@ export interface Order {
   payment?: PaymentBrief | null;
 }
 
+export interface ReturnableItem {key:string;order_item_id:number;variant_id:number;product_name:string;size_name?:string;color_name?:string;quantity:number;amount:number;}
+export interface Refund {id:number;order_id:number;amount:number;status:string;reason:string;source:string;reference?:string;receipt_number:string;created_at:string;completed_at?:string;error?:string;payouts:{method:string;amount:number}[];items:{id:number;lot_key:string;quantity:number;amount:number;restock:boolean;restocked_quantity:number;pending_return:number}[];}
+export interface RefundInput {request_id:string;reason:string;amount?:number;restock:boolean;items:{lot_key:string;quantity:number}[];}
+
 export interface OrderInput {
   order_type?: 'DIGITAL' | 'PRESENCIAL';
   branch_id?: number | null;
@@ -201,6 +216,8 @@ export interface OrderInput {
 }
 
 export interface PosSaleInput {
+  request_id?: string;
+  cash_received?: number | null;
   branch_id: number;
   items: { variant_id: number; quantity: number }[];
   client_id?: number | null;
@@ -209,6 +226,7 @@ export interface PosSaleInput {
 }
 
 export interface PayInput {
+  cash_received?: number | null;
   payment_method: string;
   card_number?: string | null;
 }
@@ -260,6 +278,9 @@ export interface NotificationItem {
 // ------------------------------------------------------------------
 
 export interface ReportKpis {
+  gross_sales: number;
+  refund_amount: number;
+  refund_pending: number;
   total_sales: number;
   total_orders: number;
   avg_order: number;
@@ -396,7 +417,7 @@ export class ApiService {
       }
     }
     if (this.currentUser.value) {
-      this.getProfile().subscribe({ error: () => this.logout() });
+      this.getProfile().subscribe({ error: (err) => { if (err.status === 401) this.logout(); } });
     }
   }
 
@@ -408,8 +429,39 @@ export class ApiService {
     return !!this.currentUser.value;
   }
 
+  get storefrontId(): number | null {
+    const id = Number(localStorage.getItem('fashionstore_public_store'));
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+
+  set storefrontId(id: number | null) {
+    if (id === null) localStorage.removeItem('fashionstore_public_store');
+    else localStorage.setItem('fashionstore_public_store', String(id));
+  }
+
+  private publicCatalogUrl(url: string): string {
+    const id = this.isAuthenticated ? null : this.storefrontId;
+    return id ? `${url}${url.includes('?') ? '&' : '?'}empresa_id=${id}` : url;
+  }
+
   get isAdmin(): boolean {
     return this.currentUser.value?.role_name === 'Administrador';
+  }
+
+  getAudit(params: Record<string, string | number>): Observable<any> {
+    return this.request('GET', '/bitacora?' + new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)])).toString());
+  }
+
+  refundOrder(id:number,payload:RefundInput,request=false): Observable<Order> {
+    return this.request('POST',`/orders/${id}/${request ? 'refund-requests' : 'refunds'}`,payload);
+  }
+  retryRefund(orderId:number,id:number):Observable<Order> {return this.request('POST',`/orders/${orderId}/refunds/${id}/retry`,{});}
+  withdrawRefund(orderId:number,id:number):Observable<Order> {return this.request('POST',`/orders/${orderId}/refunds/${id}/withdraw`,{});}
+  restockRefund(orderId:number,id:number,itemId:number,quantity:number,request_id:string):Observable<Order> {return this.request('POST',`/orders/${orderId}/refunds/${id}/restock`,{refund_item_id:itemId,quantity,request_id});}
+  decideRefund(orderId:number,id:number,approve:boolean,restock:boolean):Observable<Order> {return this.request('POST',`/orders/${orderId}/refunds/${id}/decision`,{approve,restock});}
+
+  reconcileInventory(branchId: number | null): Observable<{consistent:boolean; checked:number; differences:number; items:{inventory_id:number;product_name:string;branch_name:string;available:number;ledger_balance:number;difference:number}[]}> {
+    return this.request('GET', '/inventory/reconciliation' + (branchId == null ? '' : '?branch_id=' + branchId));
   }
 
   private headers(): Record<string, string> {
@@ -422,6 +474,8 @@ export class ApiService {
   }
 
   private request<T>(method: string, url: string, body?: unknown): Observable<T> {
+    const scope = offlineScope();
+    const cacheable = method === 'GET' && !url.startsWith('/auth/') && !url.startsWith('/bitacora');
     return this.http
       .request<T>(method, `${this.baseUrl}${url}`, {
         body,
@@ -429,7 +483,15 @@ export class ApiService {
       })
       .pipe(
         timeout(20000),
+        mergeMap(data => cacheable ? from(cacheOfflineResponse(scope, url, data).then(() => data).catch(() => data)) : of(data)),
         catchError((err: unknown) => {
+          if (cacheable && (!(err instanceof HttpErrorResponse) || err.status === 0 || [502, 503, 504].includes(err.status))) {
+            return from((async () => {
+              const cached = await readOfflineResponse(scope, url);
+              if (cached !== undefined && offlineScope() === scope) return cached as T;
+              throw err;
+            })());
+          }
           if (err instanceof HttpErrorResponse) {
             if (err.status === 401 && !url.includes('/auth/login')) {
               this.logout();
@@ -443,6 +505,12 @@ export class ApiService {
           return throwError(() => err);
         })
       );
+  }
+
+  async prepararOffline(): Promise<void> {
+    const products = await firstValueFrom(this.getProducts());
+    await Promise.all([firstValueFrom(this.getBranches()), firstValueFrom(this.getCategories()), firstValueFrom(this.getAvailability({}))]);
+    for (const product of products.slice(0, 100)) await firstValueFrom(this.getVariants(product.id));
   }
 
   private errorMessage(err: HttpErrorResponse): string {
@@ -474,9 +542,17 @@ export class ApiService {
     last_name: string;
     email: string;
     password: string;
+    empresa_id?: number | null;
   }): Observable<User> {
     return this.request('POST', '/auth/register', data);
   }
+
+  checkoutReservation(id: number, items: { variant_id: number; quantity: number }[]): Observable<Order> {
+    return this.request('POST', `/reservations/${id}/checkout`, { items });
+  }
+  finishReservation(id: number): Observable<Reservation> { return this.request('POST', `/reservations/${id}/finish`, {}); }
+
+  getTiendas(): Observable<{ id: number; nombre: string }[]> { return this.request('GET', '/plataforma/tiendas'); }
 
   getProfile(): Observable<User> {
     return this.request<User>('GET', '/auth/me').pipe(
@@ -516,11 +592,11 @@ export class ApiService {
   // ------------------------------------------------------------------
   getBranches(city = ''): Observable<Branch[]> {
     const q = city.trim() ? `?city=${encodeURIComponent(city.trim())}` : '';
-    return this.request<Branch[]>('GET', `/branches/${q}`);
+    return this.request<Branch[]>('GET', this.publicCatalogUrl(`/branches/${q}`));
   }
 
   getBranch(id: number): Observable<Branch> {
-    return this.request<Branch>('GET', `/branches/${id}`);
+    return this.request<Branch>('GET', this.publicCatalogUrl(`/branches/${id}`));
   }
 
   createBranch(data: Partial<Branch>): Observable<Branch> {
@@ -544,11 +620,11 @@ export class ApiService {
     if (categoryId) params.push(`category_id=${categoryId}`);
     if (seasonId) params.push(`season_id=${seasonId}`);
     const qs = params.length ? `?${params.join('&')}` : '';
-    return this.request<Product[]>('GET', `/products/${qs}`);
+    return this.request<Product[]>('GET', this.publicCatalogUrl(`/products/${qs}`));
   }
 
   getProduct(id: number): Observable<Product> {
-    return this.request<Product>('GET', `/products/${id}`);
+    return this.request<Product>('GET', this.publicCatalogUrl(`/products/${id}`));
   }
 
   createProduct(data: ProductInput): Observable<Product> {
@@ -567,7 +643,7 @@ export class ApiService {
   // Variantes
   // ------------------------------------------------------------------
   getVariants(productId: number): Observable<ProductVariant[]> {
-    return this.request<ProductVariant[]>('GET', `/products/${productId}/variants`);
+    return this.request<ProductVariant[]>('GET', this.publicCatalogUrl(`/products/${productId}/variants`));
   }
 
   createVariant(productId: number, data: { size_id: number; color_id: number; sku: string; stock?: number; price?: number | null }): Observable<ProductVariant> {
@@ -586,7 +662,7 @@ export class ApiService {
   // Catálogo (referencias)
   // ------------------------------------------------------------------
   getCategories(): Observable<CategoryItem[]> {
-    return this.request<CategoryItem[]>('GET', '/products/metadata/categories');
+    return this.request<CategoryItem[]>('GET', this.publicCatalogUrl('/products/metadata/categories'));
   }
 
   getSeasons(): Observable<MetadataItem[]> {
@@ -638,7 +714,7 @@ export class ApiService {
     if (params.branch_id) p.push(`branch_id=${params.branch_id}`);
     if (params.q?.trim()) p.push(`q=${encodeURIComponent(params.q.trim())}`);
     const qs = p.length ? `?${p.join('&')}` : '';
-    return this.request<AvailabilityItem[]>('GET', `/inventory/availability${qs}`);
+    return this.request<AvailabilityItem[]>('GET', this.publicCatalogUrl(`/inventory/availability${qs}`));
   }
 
   // ------------------------------------------------------------------

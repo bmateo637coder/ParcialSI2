@@ -236,6 +236,13 @@ interface InventoryMovementRow {
           <option *ngFor="let b of branches" [ngValue]="b.id">{{ b.name }}</option>
         </select>
         <span class="badge badge-info" *ngIf="inventory.length"> {{ inventory.length }} registros </span>
+        <button class="btn btn-outline btn-sm" (click)="reconcile()" [disabled]="reconciling">{{ reconciling ? 'Comprobando…' : 'Conciliar movimientos' }}</button>
+      </div>
+
+      <div class="card" *ngIf="reconciliation">
+        <strong>{{ reconciliation.consistent ? 'Inventario conciliado: todas las existencias coinciden con sus movimientos.' : 'Se encontraron diferencias que necesitan revisión.' }}</strong>
+        <p>{{ reconciliation.checked }} registros comprobados · {{ reconciliation.differences }} diferencias. Las reservas ya están descontadas del stock disponible.</p>
+        <table class="table" *ngIf="reconciliation.differences"><thead><tr><th>Producto / sucursal</th><th>Disponible</th><th>Saldo de movimientos</th><th>Diferencia</th></tr></thead><tbody><tr *ngFor="let row of reconciliation.items"><ng-container *ngIf="row.difference"><td>{{ row.product_name }} / {{ row.branch_name }}</td><td>{{ row.available }}</td><td>{{ row.ledger_balance }}</td><td>{{ row.difference }}</td></ng-container></tr></tbody></table>
       </div>
 
       <div *ngIf="inventoryLoading" class="skeleton" style="height:60px;"></div>
@@ -644,6 +651,8 @@ export class AdminComponent implements OnInit {
   // --- Inventario (CU21) ---
   inventory: InventoryRow[] = [];
   inventoryLoading = false;
+  reconciling = false;
+  reconciliation: {consistent:boolean; checked:number; differences:number; items:{inventory_id:number;product_name:string;branch_name:string;available:number;ledger_balance:number;difference:number}[]} | null = null;
   lowStockOnly = false;
   inventoryBranchFilter: number | null = null;
   selectedInventory: InventoryRow | null = null;
@@ -824,6 +833,7 @@ export class AdminComponent implements OnInit {
   // Inventario y movimientos (CU21)
   // ----------------------------------------------------------------
   loadInventory(): void {
+    this.reconciliation = null;
     this.inventoryLoading = true;
     this.api
       .getInventory({
@@ -843,6 +853,12 @@ export class AdminComponent implements OnInit {
     this.adjustTarget = inv;
     this.adjustValue = inv.available;
     this.adjustModalOpen = true;
+  }
+
+  reconcile(): void {
+    if (this.reconciling) return;
+    this.reconciling = true;
+    this.api.reconcileInventory(this.inventoryBranchFilter).subscribe({ next: result => { this.reconciliation=result;this.reconciling=false; }, error: () => {this.reconciling=false;this.toast.info('No se pudo conciliar el inventario.');} });
   }
 
   closeAdjust(): void {

@@ -1,0 +1,3662 @@
+{
+  "packages": [
+    [
+      "P1",
+      "Gestión de Identidad y Acceso"
+    ],
+    [
+      "P2",
+      "Gestión de Catálogo y Sucursales"
+    ],
+    [
+      "P3",
+      "Gestión de Operaciones de Compra"
+    ],
+    [
+      "P4",
+      "Pagos e Inventario"
+    ],
+    [
+      "P5",
+      "Inteligencia y Analítica heredada"
+    ],
+    [
+      "P6",
+      "Plataforma SaaS"
+    ],
+    [
+      "P7",
+      "Offline y Sincronización"
+    ],
+    [
+      "P8",
+      "Analítica e IA del segundo parcial"
+    ]
+  ],
+  "actors": [
+    [
+      "Usuario",
+      "Usuario",
+      true
+    ],
+    [
+      "Empleado",
+      "Personal de empresa",
+      true
+    ],
+    [
+      "AdminEmpresa",
+      "Administrador de empresa",
+      false
+    ],
+    [
+      "Encargado",
+      "Encargado de sucursal",
+      false
+    ],
+    [
+      "Cajero",
+      "Cajero",
+      false
+    ],
+    [
+      "AdminPlataforma",
+      "Administrador de plataforma",
+      false
+    ],
+    [
+      "IAExterna",
+      "Servicio de IA (opcional)",
+      false
+    ]
+  ],
+  "generalizations": [
+    [
+      "Empleado",
+      "Usuario"
+    ],
+    [
+      "AdminEmpresa",
+      "Empleado"
+    ],
+    [
+      "Encargado",
+      "Empleado"
+    ],
+    [
+      "Cajero",
+      "Empleado"
+    ],
+    [
+      "AdminPlataforma",
+      "Usuario"
+    ]
+  ],
+  "cases": [
+    {
+      "id": 1,
+      "code": "CU1",
+      "name": "Gestionar empresas (tenants)",
+      "package": "P6",
+      "actors": [
+        "AdminPlataforma"
+      ],
+      "ui": "PantallaEmpresas",
+      "control": "EmpresasControl",
+      "steps": [
+        "@AutorizacionControl:validarAdministradorPlataforma()",
+        "Empresa:comprobarNITUnico(nit)",
+        "Plan:consultarPlanActivo(plan)",
+        "Empresa:registrarEmpresa(datos)",
+        "User:crearAdministradorDeEmpresa(datos)",
+        "Suscripcion:asignarPlanInicial(fechas)",
+        "!:confirmarAltaAtomica()"
+      ],
+      "guard": "NIT duplicado o error durante el alta",
+      "alternate": [
+        "Empresa:comprobarNITUnico(nit)",
+        "!:revertirAltaCompleta()"
+      ],
+      "rf": "RF15,RF16,RF17",
+      "source": "backend/app/api/v1/endpoints/plataforma.py",
+      "note": ""
+    },
+    {
+      "id": 2,
+      "code": "CU2",
+      "name": "Gestionar planes de suscripción",
+      "package": "P6",
+      "actors": [
+        "AdminPlataforma"
+      ],
+      "ui": "PantallaPlanes",
+      "control": "PlanesControl",
+      "steps": [
+        "@AutorizacionControl:validarAdministradorPlataforma()",
+        "Plan:listarPlanes()",
+        "!:validarLimitesYFunciones(datos)",
+        "Plan:guardarPlan(datos)",
+        "!:aplicarLimitesEnProximasOperaciones()"
+      ],
+      "guard": "límites inválidos",
+      "alternate": [
+        "!:validarLimitesYFunciones(datos)",
+        "!:rechazarPlanSinGuardar()"
+      ],
+      "rf": "RF18,RF21",
+      "source": "backend/app/api/v1/endpoints/plataforma.py:crear_plan,actualizar_plan",
+      "note": ""
+    },
+    {
+      "id": 3,
+      "code": "CU3",
+      "name": "Gestionar suscripción de empresa",
+      "package": "P6",
+      "actors": [
+        "AdminPlataforma",
+        "AdminEmpresa"
+      ],
+      "ui": "PantallaSuscripcion",
+      "control": "SuscripcionesControl",
+      "steps": [
+        "@AutorizacionControl:autorizarGestionOConsulta()",
+        "Empresa:consultarEmpresa()",
+        "Suscripcion:consultarSuscripcionActual()",
+        "Plan:consultarPlanDestino()",
+        "Branch:contarSucursalesActivas()",
+        "!:validarFechasYCompatibilidad()",
+        "Suscripcion:asignarORenovarPlan()",
+        "!:confirmarSuscripcion()"
+      ],
+      "guard": "uso actual supera el plan destino",
+      "alternate": [
+        "Branch:contarSucursalesActivas()",
+        "Plan:consultarLimiteDestino()",
+        "!:rechazarCambioDePlan()"
+      ],
+      "rf": "RF19,RF20,RF21",
+      "source": "backend/app/api/v1/endpoints/plataforma.py",
+      "note": "Administrador de empresa solo consulta. El esquema actual mantiene una suscripción por empresa y la actualiza; no contiene historial de renovaciones."
+    },
+    {
+      "id": 4,
+      "code": "CU4",
+      "name": "Verificar límites del plan",
+      "package": "P6",
+      "actors": [
+        "Empleado"
+      ],
+      "ui": "SolicitudOperacionProtegida",
+      "control": "PlanGuard",
+      "steps": [
+        "@TenantGuard:obtenerEmpresaDeSesion()",
+        "Empresa:comprobarEstadoActivo()",
+        "Suscripcion:comprobarEstadoYVigencia()",
+        "Plan:consultarFuncionesYLimites()",
+        "Branch:contarSucursalesActivasSiCorresponde()",
+        "!:autorizarOperacionSolicitada()"
+      ],
+      "guard": "suscripción no vigente o función no incluida",
+      "alternate": [
+        "Suscripcion:comprobarEstadoYVigencia()",
+        "Plan:consultarFuncionesYLimites()",
+        "!:denegarOperacionConMotivo()"
+      ],
+      "rf": "RF21,RF17",
+      "source": "backend/app/core/tenant.py:validate_subscription,require_plan_profesional,enforce_branch_limit",
+      "note": "Es comportamiento incluido; no se crea un actor llamado Sistema. Offline se valida una copia local y el servidor revalida al sincronizar."
+    },
+    {
+      "id": 5,
+      "code": "CU5",
+      "name": "Preparar dispositivo para uso offline",
+      "package": "P7",
+      "actors": [
+        "Cajero",
+        "Encargado"
+      ],
+      "ui": "PantallaPrepararOffline",
+      "control": "PreparacionOfflineControl",
+      "steps": [
+        "@PlanGuard:validarPlanConConexion()",
+        "@TenantGuard:obtenerContextoEmpresaSucursal()",
+        "Product:descargarProductosEmpresa()",
+        "ProductVariant:descargarVariantesYPrecios()",
+        "Branch:descargarSucursalesAutorizadas()",
+        "Inventory:descargarExistenciasConocidas()",
+        "CatalogoLocal:guardarCatalogoSinReemplazoParcial()",
+        "SesionLocal:guardarContextoYFechaActualizacion()",
+        "!:confirmarPreparacion()"
+      ],
+      "guard": "pérdida de conexión durante la descarga",
+      "alternate": [
+        "CatalogoLocal:consultarVersionAnterior()",
+        "!:conservarCatalogoAnteriorYAdvertir()"
+      ],
+      "rf": "RF22,RF23,RF28",
+      "source": "frontend-web/src/app/api.service.ts:prepararOffline; movil/lib/core/offline/offline_db.dart",
+      "note": ""
+    },
+    {
+      "id": 6,
+      "code": "CU6",
+      "name": "Consultar catálogo sin conexión",
+      "package": "P7",
+      "actors": [
+        "Cajero",
+        "Encargado"
+      ],
+      "ui": "PantallaCatalogoOffline",
+      "control": "CatalogoOfflineControl",
+      "steps": [
+        "SesionLocal:restaurarContextoEmpresaUsuario()",
+        "CatalogoLocal:buscarProductosYVariantes(filtros)",
+        "CatalogoLocal:consultarFechaActualizacion()",
+        "OperacionLocal:considerarExistenciasPendientes()",
+        "!:mostrarDatosComoExistenciaConocida()"
+      ],
+      "guard": "no existe catálogo descargado",
+      "alternate": [
+        "CatalogoLocal:comprobarCatalogoDisponible()",
+        "!:solicitarDescargaConConexion()"
+      ],
+      "rf": "RF24,RF28",
+      "source": "frontend-web/src/app/core/offline; movil/lib/core/offline",
+      "note": "La existencia local es informativa; se advierte si está desactualizada y nunca equivale a confirmación central."
+    },
+    {
+      "id": 7,
+      "code": "CU7",
+      "name": "Registrar reserva sin conexión",
+      "package": "P7",
+      "actors": [
+        "Encargado"
+      ],
+      "ui": "PantallaReservaOffline",
+      "control": "ReservaOfflineControl",
+      "steps": [
+        "SesionLocal:validarContextoYPlanGuardado()",
+        "CatalogoLocal:consultarVariantesYExistencias()",
+        "!:validarCantidadesYCliente()",
+        "!:generarUUID()",
+        "OperacionLocal:guardarReservaYPayloadEnTransaccion()",
+        "CatalogoLocal:actualizarExistenciaLocalConocida()",
+        "!:mostrarReservaPendiente()"
+      ],
+      "guard": "error al guardar la operación local",
+      "alternate": [
+        "OperacionLocal:iniciarGuardadoAtomico()",
+        "!:revertirPersistenciaLocalSinConfirmar()"
+      ],
+      "rf": "RF25,RF28,RF30",
+      "source": "frontend-web/src/app/core/offline/offline-db.service.ts; movil/lib/core/offline/offline_db.dart",
+      "note": "La copia del plan permite control local; la vigencia y la pertenencia se revalidan en CU10."
+    },
+    {
+      "id": 8,
+      "code": "CU8",
+      "name": "Registrar venta de contado sin conexión",
+      "package": "P7",
+      "actors": [
+        "Cajero"
+      ],
+      "ui": "PantallaPOSOffline",
+      "control": "VentaOfflineControl",
+      "steps": [
+        "SesionLocal:validarContextoYPlanGuardado()",
+        "CatalogoLocal:consultarPreciosYExistencias()",
+        "!:validarSoloEfectivoYCalcularTotal()",
+        "!:generarUUID()",
+        "OperacionLocal:guardarVentaYDetalleEnTransaccion()",
+        "CatalogoLocal:descontarExistenciaLocalConocida()",
+        "!:emitirComprobanteProvisional()"
+      ],
+      "guard": "se selecciona pago electrónico sin conexión",
+      "alternate": [
+        "!:validarMetodoSoloEfectivo()",
+        "!:impedirPagoElectronicoSinGuardar()"
+      ],
+      "rf": "RF26,RF28,RF30",
+      "source": "frontend-web/src/app/pos.component.ts; movil/lib/src/screens/pos_screen.dart",
+      "note": ""
+    },
+    {
+      "id": 9,
+      "code": "CU9",
+      "name": "Consultar operaciones pendientes",
+      "package": "P7",
+      "actors": [
+        "Cajero",
+        "Encargado"
+      ],
+      "ui": "PantallaOperacionesPendientes",
+      "control": "PendientesControl",
+      "steps": [
+        "SesionLocal:restaurarEmpresaYUsuario()",
+        "OperacionLocal:listarOperacionesDelContexto()",
+        "OperacionLocal:consultarDetalleYUltimoResultado(uuid)",
+        "!:ordenarPorFechaYEstado()",
+        "!:presentarHistorialSinBorrarlo()"
+      ],
+      "guard": "no hay operaciones en ese contexto",
+      "alternate": [
+        "OperacionLocal:listarOperacionesDelContexto()",
+        "!:mostrarColaVacia()"
+      ],
+      "rf": "RF27,RF28",
+      "source": "frontend-web/src/app/features/offline/sync; movil/lib/src/screens/offline_screen.dart",
+      "note": ""
+    },
+    {
+      "id": 10,
+      "code": "CU10",
+      "name": "Sincronizar operaciones pendientes",
+      "package": "P7",
+      "actors": [
+        "Cajero",
+        "Encargado"
+      ],
+      "ui": "PantallaSincronizacion",
+      "control": "SyncClienteControl",
+      "steps": [
+        "OperacionLocal:seleccionarPendientesYReintentables()",
+        "OperacionLocal:marcarENVIADAAntesDeEnviar()",
+        "#ApiSync:enviarLoteConJWT(lote)",
+        "#ApiSync>@SyncServidorControl:sincronizarLote(lote,token)",
+        "@SyncServidorControl>@TenantGuard:validarEmpresaUsuarioYSucursal()",
+        "@SyncServidorControl>OperacionSync:buscarUUIDConResultadoPrevio(uuid)",
+        "@SyncServidorControl>@PlanGuard:revalidarSuscripcion()",
+        "@SyncServidorControl>Inventory:bloquearYValidarStockCentral()",
+        "@SyncServidorControl>Order:registrarVentaOReservaSinDuplicar()",
+        "@SyncServidorControl>InventoryMovement:registrarDescuentoAtomico()",
+        "@SyncServidorControl>OperacionSync:guardarResultadoPorUUID()",
+        "@SyncServidorControl>#ApiSync:responderPorUUID(resultados)",
+        "#ApiSync>c:recibirResultados(resultados)",
+        "OperacionLocal:confirmarOConservarSegunRespuesta()",
+        "CatalogoLocal:actualizarExistenciasConfirmadas()"
+      ],
+      "guard": "el servidor confirma pero se pierde la respuesta",
+      "alternate": [
+        "OperacionLocal:marcarENVIADAAntesDeEnviar()",
+        "#ApiSync:enviarLoteConJWT(lote)",
+        "#ApiSync>c:notificarFalloComunicacion()",
+        "OperacionLocal:conservarENVIADAConMismoUUID()",
+        "!:programarReintentoIdempotente()"
+      ],
+      "rf": "RF29,RF30,RF31,RF32,RF34",
+      "source": "backend/app/api/v1/endpoints/sync.py; frontend-web/src/app/core/offline/sync-offline.service.ts; movil/lib/core/offline/sync_offline_service.dart",
+      "note": "Los reintentos conservan UUID y ENVIADA ante respuesta perdida. Un UUID confirmado retorna el resultado original. Stock insuficiente produce conflicto sin descuento parcial."
+    },
+    {
+      "id": 11,
+      "code": "CU11",
+      "name": "Gestionar conflictos y operaciones rechazadas",
+      "package": "P7",
+      "actors": [
+        "Encargado",
+        "AdminEmpresa"
+      ],
+      "ui": "PantallaConflictos",
+      "control": "ConflictosControl",
+      "steps": [
+        "@TenantGuard:validarResponsableEmpresa()",
+        "ConflictoSync:listarConflictosNoResueltos()",
+        "OperacionSync:consultarPayloadYMotivo(uuid)",
+        "Inventory:consultarStockCentralActual()",
+        "!:validarAccionYJustificacion(accion)",
+        "@SyncServidorControl:reintentarOAnularOperacion(accion)",
+        "ConflictoSync:registrarResponsableYResultado()",
+        "!:confirmarResolucion()"
+      ],
+      "guard": "el stock cambió durante el reintento",
+      "alternate": [
+        "Inventory:bloquearYRevalidarStock()",
+        "ConflictoSync:actualizarMotivoDelConflicto()",
+        "!:mantenerOperacionSinConfirmar()"
+      ],
+      "rf": "RF33,RF34,RF32",
+      "source": "backend/app/api/v1/endpoints/sync.py:resolver_conflicto",
+      "note": ""
+    },
+    {
+      "id": 12,
+      "code": "CU12",
+      "name": "Gestionar cambio de prendas",
+      "package": "P3",
+      "actors": [
+        "Cajero",
+        "Encargado"
+      ],
+      "ui": "PantallaCambiosPrenda",
+      "control": "CambiosControl",
+      "steps": [
+        "@TenantGuard:validarVentaEmpresa()",
+        "Order:consultarVentaOriginalConfirmada()",
+        "OrderItem:validarCantidadAunNoCambiada()",
+        "!:comprobarPlazoConfigurado()",
+        "Inventory:bloquearStockPrendaNueva()",
+        "!:calcularDiferenciaYCobro()",
+        "CambioPrenda:guardarCambioConVentaOriginal()",
+        "Inventory:registrarEntradaYSalida()",
+        "InventoryMovement:guardarMovimientosCambio()",
+        "!:confirmarCambioAtomico()"
+      ],
+      "guard": "cambio fuera del plazo o sin stock",
+      "alternate": [
+        "Order:consultarFechaVenta()",
+        "!:verificarPlazoYDisponibilidad()",
+        "!:rechazarSinModificarInventario()"
+      ],
+      "rf": "RF35,RF12,RF17",
+      "source": "backend/app/api/commerce.py:exchange_garment; backend/app/core/config.py:EXCHANGE_WINDOW_DAYS",
+      "note": "Se modela plazoConfigurado: el PDF dice 7 días y el código usa 15 por defecto. No se afirma que el saldo a favor/reembolso descrito esté implementado."
+    },
+    {
+      "id": 13,
+      "code": "CU13",
+      "name": "Solicitar reporte generativo (texto o voz)",
+      "package": "P8",
+      "actors": [
+        "AdminEmpresa",
+        "Encargado"
+      ],
+      "ui": "PantallaReporteGenerativo",
+      "control": "ReporteIAControl",
+      "steps": [
+        "@TenantGuard:obtenerEmpresaDeSesion()",
+        "@PlanGuard:autorizarReportesIA()",
+        "!:normalizarTextoOTranscripcion()",
+        "@InterpreteReporteControl:clasificarIntencionYExtraerFiltros(texto)",
+        "!:validarCatalogoPermitidoYAmbiguedades()",
+        "Order:consultarVentasConFiltrosEmpresa()",
+        "Inventory:consultarExistenciasConFiltrosEmpresa()",
+        "GeneratedReport:guardarResultadoRealJSON()",
+        "!:construirTablaGraficoYNarrativa()"
+      ],
+      "guard": "solicitud ambigua o intenta consultar otra empresa",
+      "alternate": [
+        "@InterpreteReporteControl:detectarAmbiguedad(texto)",
+        "!:solicitarAclaracionSinEjecutarSQLLibre()"
+      ],
+      "rf": "RF36,RF37,RF38,RF39,RF17",
+      "source": "backend/app/api/ia_reportes.py; backend/app/services/report_intent.py; backend/app/services/report_language.py; backend/app/services/report_builder.py",
+      "note": "La IA local clasifica y extrae filtros. Consultas controladas y tenant obligatorios; no se entrega SQL generado por el usuario a la base."
+    },
+    {
+      "id": 14,
+      "code": "CU14",
+      "name": "Exportar reporte (PDF / Excel)",
+      "package": "P8",
+      "actors": [
+        "AdminEmpresa",
+        "Encargado"
+      ],
+      "ui": "PantallaExportarReporte",
+      "control": "ExportacionControl",
+      "steps": [
+        "@TenantGuard:validarReporteEmpresa()",
+        "GeneratedReport:consultarResultadoAutorizado(reporte)",
+        "!:validarFormatoPermitido(formato)",
+        "!:renderizarPDFOExcelConEncabezado()",
+        "!:entregarArchivoAutenticado()"
+      ],
+      "guard": "reporte de otra empresa o identificador inexistente",
+      "alternate": [
+        "GeneratedReport:buscarReporteEmpresa(reporte)",
+        "!:denegarDescargaAjena()"
+      ],
+      "rf": "RF40,RF17",
+      "source": "backend/app/api/ia_reportes.py:exportar_reporte,download_report",
+      "note": "La extensión se elige después de generar el reporte; no se hace include obligatorio de exportación."
+    },
+    {
+      "id": 15,
+      "code": "CU15",
+      "name": "Consultar dashboard analítico",
+      "package": "P8",
+      "actors": [
+        "AdminEmpresa",
+        "Encargado"
+      ],
+      "ui": "PantallaAnaliticaML",
+      "control": "DashboardMLControl",
+      "steps": [
+        "@TenantGuard:obtenerEmpresaDeSesion()",
+        "@PlanGuard:autorizarAnaliticaML()",
+        "AnalyticsRun:consultarModeloMasRecienteEmpresa()",
+        "Inventory:consultarStockRealPorVarianteYSucursal()",
+        "ProductVariant:consultarPreciosYVariables()",
+        "@ModelosMLControl:predecirDemandaYAsignarGrupo()",
+        "!:mostrarGraficosMetricasYFiltros()"
+      ],
+      "guard": "no hay modelo entrenado para la empresa",
+      "alternate": [
+        "AnalyticsRun:consultarModeloMasRecienteEmpresa()",
+        "!:mostrarAvisoSinPrediccionesInventadas()"
+      ],
+      "rf": "RF42,RF17",
+      "source": "backend/app/api/analitica_ml.py:dashboard_analitico; frontend-web/src/app/analytics.component.ts",
+      "note": ""
+    },
+    {
+      "id": 16,
+      "code": "CU16",
+      "name": "Entrenar y evaluar modelos de ML",
+      "package": "P8",
+      "actors": [
+        "AdminPlataforma"
+      ],
+      "ui": "PantallaEntrenamientoML",
+      "control": "EntrenamientoMLControl",
+      "steps": [
+        "@AutorizacionControl:validarResponsableEntrenamiento()",
+        "@ModelosMLControl:generarDatosSinteticosConSemilla()",
+        "@ModelosMLControl:separarEntrenamientoYValidacion()",
+        "@ModelosMLControl:normalizarSoloConEntrenamiento()",
+        "@ModelosMLControl:entrenarRegresionLinealYKMeans()",
+        "@ModelosMLControl:evaluarMAERMSER2YSilueta()",
+        "AnalyticsRun:guardarParametrosMetricasYFecha()",
+        "!:presentarMetricasYLimitaciones()"
+      ],
+      "guard": "datos insuficientes o error de entrenamiento",
+      "alternate": [
+        "@ModelosMLControl:validarConjuntoEntrenamiento()",
+        "!:conservarModeloAnteriorYNotificarError()"
+      ],
+      "rf": "RF41",
+      "source": "backend/app/api/analitica_ml.py:entrenar_modelos; backend/app/services/analytics.py:train",
+      "note": "Actor normativo del PDF: Administrador de plataforma. El endpoint actual autoriza Administrador de empresa/Encargado con plan ML y guarda un AnalyticsRun por empresa. No existe publicación/versionado independiente; diferencia a conciliar."
+    }
+  ],
+  "models": [
+    {
+      "key": "AnalyticsRun",
+      "name": "EjecucionModeloML",
+      "package": "P8",
+      "source": "backend/app/models/analytics.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "model_json",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "analytics_runs"
+    },
+    {
+      "key": "ChatConversation",
+      "name": "Conversacion",
+      "package": "P5",
+      "source": "backend/app/models/assistant.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "client_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "chat_conversations"
+    },
+    {
+      "key": "ChatMessage",
+      "name": "MensajeChat",
+      "package": "P5",
+      "source": "backend/app/models/assistant.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "conversation_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "chat_conversations.id"
+        },
+        {
+          "name": "role",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "content",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "chat_messages"
+    },
+    {
+      "key": "Branch",
+      "name": "Sucursal",
+      "package": "P2",
+      "source": "backend/app/models/branch.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "city",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "address",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "latitude",
+          "type": "Decimal",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "longitude",
+          "type": "Decimal",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "branches"
+    },
+    {
+      "key": "Provider",
+      "name": "Proveedor",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "contact_email",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "nit",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "address",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "providers"
+    },
+    {
+      "key": "Category",
+      "name": "Categoria",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "categories"
+    },
+    {
+      "key": "Season",
+      "name": "Temporada",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "year",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "start_date",
+          "type": "Date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "end_date",
+          "type": "Date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "seasons"
+    },
+    {
+      "key": "Collection",
+      "name": "Coleccion",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "season_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "seasons.id"
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "collections"
+    },
+    {
+      "key": "Size",
+      "name": "Talla",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "sizes"
+    },
+    {
+      "key": "Color",
+      "name": "Color",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "colors"
+    },
+    {
+      "key": "Product",
+      "name": "Producto",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "base_price",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "image_url",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "category_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "categories.id"
+        },
+        {
+          "name": "season_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "seasons.id"
+        },
+        {
+          "name": "collection_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "collections.id"
+        },
+        {
+          "name": "provider_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "providers.id"
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "products"
+    },
+    {
+      "key": "ProviderAccount",
+      "name": "CuentaProveedor",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "provider_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "providers.id"
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "provider_accounts"
+    },
+    {
+      "key": "ProductProposal",
+      "name": "PropuestaProducto",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "provider_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "providers.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "base_price",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "admin_comment",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "processed_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "product_proposals"
+    },
+    {
+      "key": "ProductVariant",
+      "name": "VarianteProducto",
+      "package": "P2",
+      "source": "backend/app/models/catalog.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "product_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "products.id"
+        },
+        {
+          "name": "size_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "sizes.id"
+        },
+        {
+          "name": "color_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "colors.id"
+        },
+        {
+          "name": "sku",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        },
+        {
+          "name": "price",
+          "type": "Real",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "stock",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "effective_price",
+          "type": "Real",
+          "derived": true
+        },
+        {
+          "name": "size_name",
+          "type": "str | None",
+          "derived": true
+        },
+        {
+          "name": "color_name",
+          "type": "str | None",
+          "derived": true
+        }
+      ],
+      "methods": [],
+      "table": "product_variants"
+    },
+    {
+      "key": "CartItem",
+      "name": "ItemCarrito",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "client_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "variant_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "product_variants.id"
+        },
+        {
+          "name": "quantity",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "added_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "cart_items"
+    },
+    {
+      "key": "Reservation",
+      "name": "Reserva",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        },
+        {
+          "name": "client_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "branch_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "branches.id"
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "reservation_date",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "expiration_date",
+          "type": "DateTime",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "attend_date",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "total",
+          "type": "Real",
+          "derived": true
+        },
+        {
+          "name": "item_count",
+          "type": "Integer",
+          "derived": true
+        }
+      ],
+      "methods": [],
+      "table": "reservations"
+    },
+    {
+      "key": "ReservationItem",
+      "name": "DetalleReserva",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "reservation_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "reservations.id"
+        },
+        {
+          "name": "variant_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "product_variants.id"
+        },
+        {
+          "name": "quantity",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "unit_price",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "subtotal",
+          "type": "Real",
+          "derived": true
+        }
+      ],
+      "methods": [],
+      "table": "reservation_items"
+    },
+    {
+      "key": "Order",
+      "name": "VentaPedido",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "client_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "branch_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "branches.id"
+        },
+        {
+          "name": "order_type",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "total",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "subtotal",
+          "type": "Real",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "shipping_address",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "es_offline",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "origen",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "order_number",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "payment_method",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "orders"
+    },
+    {
+      "key": "OrderItem",
+      "name": "DetalleVenta",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "order_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "orders.id"
+        },
+        {
+          "name": "variant_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "product_variants.id"
+        },
+        {
+          "name": "quantity",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "unit_price",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "discount",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "promotion_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "subtotal",
+          "type": "Real",
+          "derived": true
+        }
+      ],
+      "methods": [],
+      "table": "order_items"
+    },
+    {
+      "key": "Payment",
+      "name": "Pago",
+      "package": "P4",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "order_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": "orders.id"
+        },
+        {
+          "name": "amount",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "method",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "stripe_payment_id",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "paid_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "payments"
+    },
+    {
+      "key": "Notification",
+      "name": "Notificacion",
+      "package": "P3",
+      "source": "backend/app/models/commerce.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "message",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_read",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "notifications"
+    },
+    {
+      "key": "Inventory",
+      "name": "Inventario",
+      "package": "P4",
+      "source": "backend/app/models/inventory.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "variant_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "product_variants.id"
+        },
+        {
+          "name": "branch_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "branches.id"
+        },
+        {
+          "name": "available",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "inventory"
+    },
+    {
+      "key": "InventoryMovement",
+      "name": "MovimientoInventario",
+      "package": "P4",
+      "source": "backend/app/models/inventory.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "inventory_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "inventory.id"
+        },
+        {
+          "name": "movement_type",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "quantity",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "inventory_movements"
+    },
+    {
+      "key": "Promotion",
+      "name": "Promocion",
+      "package": "P2",
+      "source": "backend/app/models/promotion.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "discount_type",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "value",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "target_type",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "target_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "start_date",
+          "type": "Date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "end_date",
+          "type": "Date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "promotions"
+    },
+    {
+      "key": "GeneratedReport",
+      "name": "ReporteGenerado",
+      "package": "P8",
+      "source": "backend/app/models/report.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "user_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "result_json",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "generated_reports"
+    },
+    {
+      "key": "OperacionSync",
+      "name": "OperacionSync",
+      "package": "P7",
+      "source": "backend/app/models/sync.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "uuid",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "sucursal_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "branches.id"
+        },
+        {
+          "name": "usuario_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "tipo_operacion",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "payload_json",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "estado",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "intentos",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "fecha_local",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "fecha_sync",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "respuesta_servidor",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "operaciones_sync"
+    },
+    {
+      "key": "ConflictoSync",
+      "name": "ConflictoSync",
+      "package": "P7",
+      "source": "backend/app/models/sync.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "operacion_sync_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": "operaciones_sync.id"
+        },
+        {
+          "name": "motivo",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "stock_disponible",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "cantidad_solicitada",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "resuelto",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "resuelto_por",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "fecha_resolucion",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "accion_tomada",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "conflictos_sync"
+    },
+    {
+      "key": "CambioPrenda",
+      "name": "CambioPrenda",
+      "package": "P3",
+      "source": "backend/app/models/sync.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "venta_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "orders.id"
+        },
+        {
+          "name": "usuario_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "users.id"
+        },
+        {
+          "name": "fecha_solicitud",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "fecha_limite",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "estado",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "observaciones",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "detalle_json",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "monto_diferencia",
+          "type": "Real",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "cambios_prenda"
+    },
+    {
+      "key": "Empresa",
+      "name": "Empresa",
+      "package": "P6",
+      "source": "backend/app/models/tenant.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "razon_social",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "nit",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        },
+        {
+          "name": "logo_url",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "email_contacto",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "telefono",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "direccion",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "empresas"
+    },
+    {
+      "key": "Plan",
+      "name": "Plan",
+      "package": "P6",
+      "source": "backend/app/models/tenant.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "nombre",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "max_sucursales",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "permite_reportes_ia",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "permite_analitica_ml",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "precio_mensual",
+          "type": "Real",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "descripcion",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "planes"
+    },
+    {
+      "key": "Suscripcion",
+      "name": "Suscripcion",
+      "package": "P6",
+      "source": "backend/app/models/tenant.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "plan_id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": "planes.id"
+        },
+        {
+          "name": "fecha_inicio",
+          "type": "Date",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "fecha_vencimiento",
+          "type": "Date",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "estado",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "suscripciones"
+    },
+    {
+      "key": "Role",
+      "name": "Rol",
+      "package": "P1",
+      "source": "backend/app/models/user.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        }
+      ],
+      "methods": [],
+      "table": "roles"
+    },
+    {
+      "key": "User",
+      "name": "Usuario",
+      "package": "P1",
+      "source": "backend/app/models/user.py",
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "empresas.id"
+        },
+        {
+          "name": "first_name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "last_name",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "fk": null
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "hashed_password",
+          "type": "String",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "is_active",
+          "type": "Boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "role_id",
+          "type": "Integer",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": "roles.id"
+        },
+        {
+          "name": "created_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "updated_at",
+          "type": "DateTime",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "fk": null
+        },
+        {
+          "name": "full_name",
+          "type": "String",
+          "derived": true
+        },
+        {
+          "name": "role_name",
+          "type": "str | None",
+          "derived": true
+        }
+      ],
+      "methods": [],
+      "table": "users"
+    },
+    {
+      "key": "OperacionLocal",
+      "name": "OperacionLocal",
+      "package": "P7",
+      "source": "IndexedDB (Dexie) / SQLite (sqflite): operación y payload JSON; no son tablas comerciales duplicadas del servidor.",
+      "table": "",
+      "attributes": [
+        {
+          "name": "uuid",
+          "type": "String"
+        },
+        {
+          "name": "empresaId",
+          "type": "Integer"
+        },
+        {
+          "name": "usuarioId",
+          "type": "Integer"
+        },
+        {
+          "name": "sucursalId",
+          "type": "Integer"
+        },
+        {
+          "name": "tipo",
+          "type": "String"
+        },
+        {
+          "name": "payload",
+          "type": "JSON"
+        },
+        {
+          "name": "estado",
+          "type": "String"
+        },
+        {
+          "name": "intentos",
+          "type": "Integer"
+        },
+        {
+          "name": "ultimoMensaje",
+          "type": "String"
+        },
+        {
+          "name": "fechaLocal",
+          "type": "DateTime"
+        }
+      ],
+      "methods": []
+    },
+    {
+      "key": "CatalogoLocal",
+      "name": "CatalogoLocal",
+      "package": "P7",
+      "source": "frontend-web/src/app/core/offline/offline-db.service.ts; movil/lib/core/offline/offline_db.dart",
+      "table": "",
+      "attributes": [
+        {
+          "name": "contexto",
+          "type": "String"
+        },
+        {
+          "name": "productosVariantes",
+          "type": "JSON"
+        },
+        {
+          "name": "sucursales",
+          "type": "JSON"
+        },
+        {
+          "name": "existenciasConocidas",
+          "type": "JSON"
+        },
+        {
+          "name": "actualizadoEn",
+          "type": "DateTime"
+        }
+      ],
+      "methods": []
+    },
+    {
+      "key": "SesionLocal",
+      "name": "SesionLocal",
+      "package": "P7",
+      "source": "Sesión y contexto guardados; los permisos definitivos se validan en el servidor.",
+      "table": "",
+      "attributes": [
+        {
+          "name": "empresaId",
+          "type": "Integer"
+        },
+        {
+          "name": "usuarioId",
+          "type": "Integer"
+        },
+        {
+          "name": "rol",
+          "type": "String"
+        },
+        {
+          "name": "actualizadaEn",
+          "type": "DateTime"
+        }
+      ],
+      "methods": []
+    }
+  ],
+  "domain": [
+    [
+      "Empresa",
+      "P6",
+      "razonSocial:String,nit:String,activa:Boolean"
+    ],
+    [
+      "Plan",
+      "P6",
+      "nombre:String,maxSucursales:Integer,permiteIA:Boolean"
+    ],
+    [
+      "Suscripcion",
+      "P6",
+      "inicio:Date,vencimiento:Date,estado:String"
+    ],
+    [
+      "Usuario",
+      "P1",
+      "nombre:String,correo:String,activo:Boolean"
+    ],
+    [
+      "Rol",
+      "P1",
+      "nombre:String"
+    ],
+    [
+      "Sucursal",
+      "P2",
+      "nombre:String,ciudad:String,direccion:String"
+    ],
+    [
+      "Producto",
+      "P2",
+      "nombre:String,descripcion:String,precioBase:Real"
+    ],
+    [
+      "Categoria",
+      "P2",
+      "nombre:String"
+    ],
+    [
+      "Temporada",
+      "P2",
+      "nombre:String,inicio:Date,fin:Date"
+    ],
+    [
+      "Coleccion",
+      "P2",
+      "nombre:String"
+    ],
+    [
+      "Proveedor",
+      "P2",
+      "nombre:String,nit:String"
+    ],
+    [
+      "VarianteProducto",
+      "P2",
+      "sku:String,precio:Real"
+    ],
+    [
+      "Talla",
+      "P2",
+      "nombre:String"
+    ],
+    [
+      "Color",
+      "P2",
+      "nombre:String"
+    ],
+    [
+      "Inventario",
+      "P4",
+      "cantidadDisponible:Integer"
+    ],
+    [
+      "MovimientoInventario",
+      "P4",
+      "tipo:String,cantidad:Integer,motivo:String,fecha:DateTime"
+    ],
+    [
+      "ItemCarrito",
+      "P3",
+      "cantidad:Integer"
+    ],
+    [
+      "Reserva",
+      "P3",
+      "codigo:String,estado:String,vencimiento:DateTime"
+    ],
+    [
+      "DetalleReserva",
+      "P3",
+      "cantidad:Integer,precioUnitario:Real"
+    ],
+    [
+      "VentaPedido",
+      "P3",
+      "tipo:String,estado:String,total:Real,fecha:DateTime"
+    ],
+    [
+      "DetalleVenta",
+      "P3",
+      "cantidad:Integer,precioUnitario:Real,descuento:Real"
+    ],
+    [
+      "Pago",
+      "P4",
+      "metodo:String,importe:Real,estado:String"
+    ],
+    [
+      "CambioPrenda",
+      "P3",
+      "fecha:DateTime,diferencia:Real,estado:String"
+    ],
+    [
+      "Promocion",
+      "P2",
+      "nombre:String,tipo:String,valor:Real"
+    ],
+    [
+      "Notificacion",
+      "P3",
+      "titulo:String,mensaje:String,leida:Boolean"
+    ],
+    [
+      "Conversacion",
+      "P5",
+      "inicio:DateTime"
+    ],
+    [
+      "MensajeChat",
+      "P5",
+      "rol:String,contenido:String,fecha:DateTime"
+    ],
+    [
+      "OperacionOffline",
+      "P7",
+      "uuid:String,tipo:String,estado:String,fecha:DateTime"
+    ],
+    [
+      "ResultadoSincronizacion",
+      "P7",
+      "estado:String,motivo:String,fecha:DateTime"
+    ],
+    [
+      "ConflictoSync",
+      "P7",
+      "motivo:String,resuelto:Boolean"
+    ],
+    [
+      "SolicitudReporte",
+      "P8",
+      "texto:String,filtros:String,estado:String,fecha:DateTime"
+    ],
+    [
+      "ReporteGenerado",
+      "P8",
+      "resultado:String,fecha:DateTime"
+    ],
+    [
+      "ModeloML",
+      "P8",
+      "tipo:String,parametros:String,metricas:String,fecha:DateTime"
+    ]
+  ],
+  "domainRelations": [
+    [
+      "Empresa",
+      "Suscripcion",
+      "1",
+      "0..*",
+      "contrata (máximo una vigente)",
+      false
+    ],
+    [
+      "Plan",
+      "Suscripcion",
+      "1",
+      "0..*",
+      "define condiciones",
+      false
+    ],
+    [
+      "Empresa",
+      "Sucursal",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Producto",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Proveedor",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Categoria",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Temporada",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Promocion",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "OperacionOffline",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "ReporteGenerado",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "ModeloML",
+      "1",
+      "0..*",
+      "administra",
+      false
+    ],
+    [
+      "Empresa",
+      "Usuario",
+      "0..1",
+      "0..*",
+      "cuentas de empresa; plataforma sin empresa",
+      false
+    ],
+    [
+      "Rol",
+      "Usuario",
+      "0..1",
+      "0..*",
+      "autoriza",
+      false
+    ],
+    [
+      "Temporada",
+      "Coleccion",
+      "0..1",
+      "0..*",
+      "agrupa",
+      false
+    ],
+    [
+      "Categoria",
+      "Producto",
+      "0..1",
+      "0..*",
+      "clasifica",
+      false
+    ],
+    [
+      "Proveedor",
+      "Producto",
+      "0..1",
+      "0..*",
+      "suministra",
+      false
+    ],
+    [
+      "Temporada",
+      "Producto",
+      "0..1",
+      "0..*",
+      "organiza",
+      false
+    ],
+    [
+      "Coleccion",
+      "Producto",
+      "0..1",
+      "0..*",
+      "reúne",
+      false
+    ],
+    [
+      "Producto",
+      "VarianteProducto",
+      "1",
+      "0..*",
+      "variantes",
+      true
+    ],
+    [
+      "Talla",
+      "VarianteProducto",
+      "1",
+      "0..*",
+      "talla",
+      false
+    ],
+    [
+      "Color",
+      "VarianteProducto",
+      "1",
+      "0..*",
+      "color",
+      false
+    ],
+    [
+      "Sucursal",
+      "Inventario",
+      "1",
+      "0..*",
+      "existencias",
+      false
+    ],
+    [
+      "VarianteProducto",
+      "Inventario",
+      "1",
+      "0..*",
+      "stock por sucursal",
+      false
+    ],
+    [
+      "Inventario",
+      "MovimientoInventario",
+      "1",
+      "0..*",
+      "historial",
+      false
+    ],
+    [
+      "Usuario",
+      "ItemCarrito",
+      "1",
+      "0..*",
+      "carrito",
+      true
+    ],
+    [
+      "VarianteProducto",
+      "ItemCarrito",
+      "1",
+      "0..*",
+      "selección",
+      false
+    ],
+    [
+      "Usuario",
+      "Reserva",
+      "1",
+      "0..*",
+      "reserva",
+      false
+    ],
+    [
+      "Sucursal",
+      "Reserva",
+      "1",
+      "0..*",
+      "atiende",
+      false
+    ],
+    [
+      "Reserva",
+      "DetalleReserva",
+      "1",
+      "1..*",
+      "detalles",
+      true
+    ],
+    [
+      "VarianteProducto",
+      "DetalleReserva",
+      "1",
+      "0..*",
+      "reservada",
+      false
+    ],
+    [
+      "Empresa",
+      "VentaPedido",
+      "1",
+      "0..*",
+      "registra",
+      false
+    ],
+    [
+      "Usuario",
+      "VentaPedido",
+      "0..1",
+      "0..*",
+      "cliente",
+      false
+    ],
+    [
+      "Sucursal",
+      "VentaPedido",
+      "0..1",
+      "0..*",
+      "vende",
+      false
+    ],
+    [
+      "VentaPedido",
+      "DetalleVenta",
+      "1",
+      "1..*",
+      "detalles",
+      true
+    ],
+    [
+      "VarianteProducto",
+      "DetalleVenta",
+      "1",
+      "0..*",
+      "vendida",
+      false
+    ],
+    [
+      "VentaPedido",
+      "Pago",
+      "1",
+      "0..1",
+      "cobro",
+      false
+    ],
+    [
+      "VentaPedido",
+      "CambioPrenda",
+      "1",
+      "0..*",
+      "cambios",
+      false
+    ],
+    [
+      "Usuario",
+      "Notificacion",
+      "1",
+      "0..*",
+      "recibe",
+      false
+    ],
+    [
+      "Usuario",
+      "Conversacion",
+      "1",
+      "0..*",
+      "inicia",
+      false
+    ],
+    [
+      "Conversacion",
+      "MensajeChat",
+      "1",
+      "0..*",
+      "mensajes",
+      true
+    ],
+    [
+      "OperacionOffline",
+      "ResultadoSincronizacion",
+      "1",
+      "0..*",
+      "resultados conceptuales",
+      false
+    ],
+    [
+      "OperacionOffline",
+      "ConflictoSync",
+      "1",
+      "0..1",
+      "conflicto",
+      false
+    ],
+    [
+      "OperacionOffline",
+      "VentaPedido",
+      "0..1",
+      "0..1",
+      "origina si tipo VENTA",
+      false
+    ],
+    [
+      "OperacionOffline",
+      "Reserva",
+      "0..1",
+      "0..1",
+      "origina si tipo RESERVA (xor)",
+      false
+    ],
+    [
+      "Usuario",
+      "SolicitudReporte",
+      "1",
+      "0..*",
+      "solicita",
+      false
+    ],
+    [
+      "SolicitudReporte",
+      "ReporteGenerado",
+      "1",
+      "0..1",
+      "produce",
+      false
+    ]
+  ],
+  "includes": [
+    [
+      1,
+      3
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      7,
+      4
+    ],
+    [
+      8,
+      4
+    ],
+    [
+      10,
+      4
+    ],
+    [
+      13,
+      4
+    ],
+    [
+      15,
+      4
+    ]
+  ],
+  "extends": [
+    [
+      14,
+      13,
+      "usuario elige exportar"
+    ]
+  ],
+  "packageDependencies": [
+    [
+      "P2",
+      "P1"
+    ],
+    [
+      "P3",
+      "P1"
+    ],
+    [
+      "P3",
+      "P2"
+    ],
+    [
+      "P3",
+      "P4"
+    ],
+    [
+      "P4",
+      "P2"
+    ],
+    [
+      "P5",
+      "P2"
+    ],
+    [
+      "P5",
+      "P3"
+    ],
+    [
+      "P6",
+      "P1"
+    ],
+    [
+      "P1",
+      "P6"
+    ],
+    [
+      "P7",
+      "P6"
+    ],
+    [
+      "P7",
+      "P2"
+    ],
+    [
+      "P7",
+      "P3"
+    ],
+    [
+      "P7",
+      "P4"
+    ],
+    [
+      "P8",
+      "P6"
+    ],
+    [
+      "P8",
+      "P3"
+    ],
+    [
+      "P8",
+      "P4"
+    ]
+  ]
+}

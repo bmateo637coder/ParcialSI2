@@ -9,10 +9,12 @@ mejor promoción vigente por variante (ver app/services/promotions.py).
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_business_user as get_current_user, require_admin
+from app.core.tenant import ensure_tenant_owns, scope_to_empresa
 from app.models.promotion import Promotion
 from app.schemas import PromotionCreate, PromotionResponse, PromotionUpdate
 from app.services.promotions import validate_target
@@ -20,11 +22,16 @@ from app.services.promotions import validate_target
 router = APIRouter()
 
 
-def _get_promo_or_404(db: Session, promotion_id: int) -> Promotion:
+def _get_promo_or_404(db: Session, promotion_id: int, user=None) -> Promotion:
     promo = db.get(Promotion, promotion_id)
     if promo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promoción no encontrada")
+    ensure_tenant_owns(promo, user, include_global=False, label="Promoci?n")
     return promo
+
+
+def _tenant_filter(query, user):
+    return scope_to_empresa(query, Promotion, user)
 
 
 def _validate_payload(payload: PromotionCreate) -> None:
@@ -48,7 +55,7 @@ def list_promotions(include_inactive: bool = False,
                     db: Session = Depends(get_db)):
     if user.role_name != "Administrador":
         include_inactive = False
-    query = db.query(Promotion)
+    query = _tenant_filter(db.query(Promotion), user)
     if not include_inactive:
         query = query.filter(Promotion.is_active == True)  # noqa: E712
     return query.order_by(Promotion.id.desc()).all()
@@ -59,9 +66,9 @@ def list_promotions(include_inactive: bool = False,
 def create_promotion(payload: PromotionCreate, _admin=Depends(require_admin),
                      db: Session = Depends(get_db)):
     _validate_payload(payload)
-    promo = Promotion(**payload.model_dump())
+    promo = Promotion(**payload.model_dump(), empresa_id=_admin.empresa_id)
     try:
-        validate_target(db, promo)
+        validate_target(db, promo, _admin.empresa_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     db.add(promo)
@@ -74,13 +81,13 @@ def create_promotion(payload: PromotionCreate, _admin=Depends(require_admin),
               summary="Actualizar promoción (admin)")
 def update_promotion(promotion_id: int, payload: PromotionUpdate,
                      _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    promo = _get_promo_or_404(db, promotion_id)
+    promo = _get_promo_or_404(db, promotion_id, _admin)
     data = payload.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(promo, field, value)
     _validate_payload(promo)
     try:
-        validate_target(db, promo)
+        validate_target(db, promo, _admin.empresa_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     db.commit()
@@ -92,7 +99,7 @@ def update_promotion(promotion_id: int, payload: PromotionUpdate,
                summary="Deshabilitar promoción (admin, soft-delete)")
 def deactivate_promotion(promotion_id: int, _admin=Depends(require_admin),
                          db: Session = Depends(get_db)):
-    promo = _get_promo_or_404(db, promotion_id)
+    promo = _get_promo_or_404(db, promotion_id, _admin)
     promo.is_active = False
     db.commit()
     db.refresh(promo)

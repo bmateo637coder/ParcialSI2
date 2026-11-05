@@ -92,9 +92,12 @@ export interface SpeechResultEventLike {
   <div *ngIf="loading" class="empty-state"><span class="spinner"></span> Calculando indicadores…</div>
 
   <div *ngIf="!loading && report && !report.empty" class="kpi-grid">
-    <div class="card kpi"><span class="kpi-label">Ventas del periodo</span>
+    <div class="card kpi"><span class="kpi-label">Ventas netas del periodo</span>
       <span class="kpi-value">Bs. {{ report.kpis.total_sales | number: '1.2-2' }}</span>
       <span class="kpi-note">{{ report.kpis.total_orders }} pedido(s)</span></div>
+    <div class="card kpi"><span class="kpi-label">Cobros</span><span class="kpi-value">Bs. {{ report.kpis.gross_sales | number:'1.2-2' }}</span><span class="kpi-note">Incluye diferencias cobradas en cambios</span></div>
+    <div class="card kpi"><span class="kpi-label">Devoluciones confirmadas</span><span class="kpi-value">Bs. {{ report.kpis.refund_amount | number:'1.2-2' }}</span><span class="kpi-note">Se restan en la fecha de devolución</span></div>
+    <div class="card kpi" *ngIf="report.kpis.refund_pending"><span class="kpi-label">Pendientes de devolver</span><span class="kpi-value">Bs. {{ report.kpis.refund_pending | number:'1.2-2' }}</span><span class="kpi-note">Todavía no descontados de los cobros</span></div>
     <div class="card kpi"><span class="kpi-label">Ticket promedio</span>
       <span class="kpi-value">Bs. {{ report.kpis.avg_order | number: '1.2-2' }}</span>
       <span class="kpi-note">por pedido</span></div>
@@ -128,7 +131,7 @@ export interface SpeechResultEventLike {
       <h3 style="margin-bottom:.5rem;">Ventas por día</h3>
       <div class="bart-chart">
         <div class="bar-col" *ngFor="let pt of report.sales_series" [title]="pt.date + ': Bs. ' + (pt.amount | number:'1.2-2') + ' (' + pt.orders + ' pedidos)'">
-          <div class="bar" [style.height.%]="barHeight(pt)"><span class="bar-val">{{ pt.amount | number: '1.0-0' }}</span></div>
+          <div class="bar" [style.background]="pt.amount < 0 ? '#b42318' : null" [style.height.%]="barHeight(pt)"><span class="bar-val">{{ pt.amount | number: '1.0-0' }}</span></div>
           <div class="bar-label">{{ pt.date.slice(5) }}</div>
         </div>
       </div>
@@ -315,8 +318,8 @@ export class ReportsComponent implements OnInit {
   }
 
   barHeight(pt: SalesPoint): number {
-    const max = Math.max(...this.report!.sales_series.map((p) => p.amount), 1);
-    return Math.max(2, Math.round((pt.amount / max) * 100));
+    const max = Math.max(...this.report!.sales_series.map((p) => Math.abs(p.amount)), 1);
+    return Math.max(2, Math.round((Math.abs(pt.amount) / max) * 100));
   }
 
   // ------------------------------------------------------------------
@@ -439,6 +442,9 @@ export class ReportsComponent implements OnInit {
     rows.push([]);
     rows.push(['Indicador', 'Valor']);
     rows.push(['Ventas (Bs.)', r.kpis.total_sales.toFixed(2)]);
+    rows.push(['Cobros (Bs.)',r.kpis.gross_sales.toFixed(2)]);
+    rows.push(['Devoluciones (Bs.)',r.kpis.refund_amount.toFixed(2)]);
+    rows.push(['Pendiente de devolver (Bs.)',r.kpis.refund_pending.toFixed(2)]);
     rows.push(['Pedidos', String(r.kpis.total_orders)]);
     rows.push(['Ticket promedio (Bs.)', r.kpis.avg_order.toFixed(2)]);
     rows.push(['Reservas', String(r.kpis.reservations)]);
@@ -492,7 +498,10 @@ export class ReportsComponent implements OnInit {
     }
 
     const kpis: Array<[string, string]> = [
-      ['Ventas del periodo', 'Bs. ' + r.kpis.total_sales.toFixed(2) + ' (' + r.kpis.total_orders + ' pedidos)'],
+      ['Ventas netas del periodo', 'Bs. ' + r.kpis.total_sales.toFixed(2) + ' (' + r.kpis.total_orders + ' pedidos)'],
+      ['Cobros','Bs. '+r.kpis.gross_sales.toFixed(2)],
+      ['Devoluciones confirmadas','Bs. '+r.kpis.refund_amount.toFixed(2)],
+      ['Pendiente de devolver','Bs. '+r.kpis.refund_pending.toFixed(2)],
       ['Ticket promedio', 'Bs. ' + r.kpis.avg_order.toFixed(2)],
       ['Reservas', String(r.kpis.reservations)],
       ['Unidades disponibles', String(r.kpis.total_units_available)],

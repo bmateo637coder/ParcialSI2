@@ -6,6 +6,9 @@ y excluye productos ya comprados. Sin historial, cae a productos destacados
 del catálogo (tal como exige el documento del enunciado).
 """
 
+from app.core.tenant import scope_to_empresa
+from app.models.user import User
+from app.models.branch import Branch
 from app.models.catalog import Product, ProductVariant
 from app.models.commerce import Order, OrderItem
 from app.models.inventory import Inventory
@@ -20,17 +23,18 @@ def _category_name(product: Product) -> str:
 
 
 def recommend(db, user_id: int, limit: int = _DEFAULT_LIMIT) -> RecommendationResponse:
+    user = db.get(User, user_id)
     rows = (
         db.query(OrderItem, Product, ProductVariant)
         .join(Order, OrderItem.order_id == Order.id)
         .join(ProductVariant, OrderItem.variant_id == ProductVariant.id)
         .join(Product, ProductVariant.product_id == Product.id)
-        .filter(Order.client_id == user_id, Order.status != "CANCELADO")
+        .filter(Order.client_id == user_id, Order.empresa_id == user.empresa_id, Order.status.in_(("PAGADO", "ENVIADO", "ENTREGADO")))
         .all()
     )
 
     if not rows:
-        return _featured(db, limit)
+        return _featured(db, limit, user)
 
     purchased_ids = set()
     category_freq: dict = {}
@@ -52,10 +56,13 @@ def recommend(db, user_id: int, limit: int = _DEFAULT_LIMIT) -> RecommendationRe
         db.query(Product, ProductVariant, Inventory)
         .join(ProductVariant, ProductVariant.product_id == Product.id)
         .join(Inventory, Inventory.variant_id == ProductVariant.id)
+        .join(Branch, Branch.id == Inventory.branch_id)
         .filter(
             Product.is_active.is_(True),
             ProductVariant.is_active.is_(True),
             Inventory.available > 0,
+            Branch.empresa_id == user.empresa_id,
+            (Product.empresa_id == user.empresa_id) | Product.empresa_id.is_(None),
         )
         .all()
     )
@@ -100,15 +107,18 @@ def recommend(db, user_id: int, limit: int = _DEFAULT_LIMIT) -> RecommendationRe
     return RecommendationResponse(source="ai", items=items)
 
 
-def _featured(db, limit: int) -> RecommendationResponse:
+def _featured(db, limit: int, user: User) -> RecommendationResponse:
     rows = (
         db.query(Product)
         .join(ProductVariant, ProductVariant.product_id == Product.id)
         .join(Inventory, Inventory.variant_id == ProductVariant.id)
+        .join(Branch, Branch.id == Inventory.branch_id)
         .filter(
             Product.is_active.is_(True),
             ProductVariant.is_active.is_(True),
             Inventory.available > 0,
+            Branch.empresa_id == user.empresa_id,
+            (Product.empresa_id == user.empresa_id) | Product.empresa_id.is_(None),
         )
         .all()
     )

@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-key-no-usar-en-produccion"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 600
+    EXCHANGE_WINDOW_DAYS: int = 15
+    ALLOW_DEMO_PASSWORD_RESET: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    FRONTEND_URL: str = "http://localhost:4200"
 
     # Orígenes permitidos para CORS (frontend de desarrollo).
     BACKEND_CORS_ORIGINS: list[str] = [

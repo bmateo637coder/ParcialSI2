@@ -1,4 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+import { SyncOfflineService } from './core/offline/sync-offline.service';
+import { ToastService } from './toast.service';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ApiService, Branch, Product, ProductVariant, Reservation } from './api.service';
@@ -12,6 +14,16 @@ import { ApiService, Branch, Product, ProductVariant, Reservation } from './api.
     <span class="eyebrow">Aparta tu prenda</span>
     <h1>Reservas</h1>
     <p class="lead">Aparta prendas en tu sucursal favorita y recógelas cuando quieras. (CU13-15)</p>
+  </div>
+
+  <div *ngIf="checkout" class="card" style="padding:1rem;margin-bottom:1rem;">
+    <h3>Prendas que compra el cliente ? {{ checkout.code }}</h3>
+    <label *ngFor="let item of checkout.items" style="display:block;margin:.75rem 0;">{{ item.product_name }} ? {{ item.size_name }} / {{ item.color_name }}
+      <input class="form-control" type="number" min="0" [max]="item.quantity" [(ngModel)]="checkoutQuantities[item.variant_id]" style="max-width:120px;">
+    </label>
+    <p>Selecciona 0 para devolver una prenda al inventario. La compra se registra en efectivo.</p>
+    <button class="btn btn-primary" [disabled]="submitting" (click)="completeCheckout()">Registrar compra en efectivo</button>
+    <button class="btn btn-outline" (click)="checkout = null">Cerrar</button>
   </div>
 
   <div class="admin-tabs" style="justify-content:center;">
@@ -57,6 +69,8 @@ import { ApiService, Branch, Product, ProductVariant, Reservation } from './api.
           <span style="font-weight:700; color:var(--accent-dark);">Total: Bs. {{ r.total | number: '1.2-2' }}</span>
           <div style="display:flex; gap:.4rem;">
             <button *ngIf="r.status === 'PENDIENTE'" class="btn btn-danger btn-sm" (click)="cancel(r)">Cancelar</button>
+            <button *ngIf="['PENDIENTE', 'ATENDIDA'].includes(r.status) && isStaff" class="btn btn-accent btn-sm" (click)="startCheckout(r)">Comprar prendas</button>
+            <button *ngIf="r.status === 'ATENDIDA' && isStaff" class="btn btn-outline btn-sm" (click)="finish(r)">Finalizar sin compra</button>
             <button *ngIf="r.status === 'PENDIENTE' && canManage" class="btn btn-accent btn-sm" (click)="attend(r)">Atender</button>
           </div>
         </div>
@@ -140,7 +154,9 @@ import { ApiService, Branch, Product, ProductVariant, Reservation } from './api.
             <td>Bs. {{ r.total | number: '1.2-2' }}</td>
             <td>
               <div class="actions">
-                <button *ngIf="r.status === 'PENDIENTE' && canManage" class="btn btn-accent btn-sm" (click)="attend(r)">Atender</button>
+                <button *ngIf="['PENDIENTE', 'ATENDIDA'].includes(r.status) && isStaff" class="btn btn-accent btn-sm" (click)="startCheckout(r)">Comprar prendas</button>
+            <button *ngIf="r.status === 'ATENDIDA' && isStaff" class="btn btn-outline btn-sm" (click)="finish(r)">Finalizar sin compra</button>
+            <button *ngIf="r.status === 'PENDIENTE' && canManage" class="btn btn-accent btn-sm" (click)="attend(r)">Atender</button>
                 <button *ngIf="r.status === 'PENDIENTE'" class="btn btn-danger btn-sm" (click)="cancel(r)">Cancelar</button>
               </div>
             </td>
@@ -179,9 +195,32 @@ export class ReservationsComponent implements OnInit {
 
   lines: { variant: ProductVariant; quantity: number; label: string }[] = [];
 
-  constructor(private api: ApiService) {}
+  checkout: Reservation | null = null;
+  checkoutQuantities: Record<number, number> = {};
+
+  startCheckout(reservation: Reservation) {
+    this.checkout = reservation;
+    this.checkoutQuantities = Object.fromEntries(reservation.items.map(item => [item.variant_id, item.quantity]));
+  }
+
+  completeCheckout() {
+    if (!this.checkout) return;
+    const items = Object.entries(this.checkoutQuantities).filter(([, quantity]) => quantity > 0)
+      .map(([variant_id, quantity]) => ({ variant_id: Number(variant_id), quantity }));
+    if (!items.length) { this.toast.info('Selecciona al menos una prenda para la compra.'); return; }
+    this.submitting = true;
+    this.api.checkoutReservation(this.checkout.id, items).subscribe({
+      next: order => { this.submitting = false; this.checkout = null; this.toast.success(`Compra ${order.receipt_number}: Bs ${order.total}. Las prendas restantes volvieron al inventario.`); this.reloadAll(); },
+      error: () => { this.submitting = false; }
+    });
+  }
+
+  finish(reservation: Reservation) { this.api.finishReservation(reservation.id).subscribe(() => this.reloadAll()); }
+
+  constructor(private api: ApiService, private offline: SyncOfflineService, private toast: ToastService) {}
 
   ngOnInit(): void {
+    this.api.getAvailability({}).subscribe({ error: () => {} });
     const user = this.api.currentUser.value;
     this.isStaff = !!user && ['Administrador', 'Encargado de Sucursal', 'Cajero'].includes(user.role_name);
     this.canManage = !!user && ['Administrador', 'Encargado de Sucursal'].includes(user.role_name);
@@ -237,9 +276,27 @@ export class ReservationsComponent implements OnInit {
     this.lines = this.lines.filter((l) => l.variant.id !== line.variant.id);
   }
 
-  submitReservation(): void {
+  async submitReservation(): Promise<void> {
     if (!this.form.branch_id || !this.lines.length) return;
     this.submitting = true;
+    if (this.api.currentUser.value?.empresa_id) {
+      try {
+        await this.offline.registrarReservaOffline({
+          sucursalId: this.form.branch_id,
+          items: this.lines.map(l => ({ variant_id: l.variant.id, quantity: l.quantity,
+            precio: l.variant.effective_price ?? l.variant.price ?? this.products.find(p => p.id === l.variant.product_id)?.base_price,
+            nombre: l.label })),
+          payload: { expiration_hours: this.form.expiration_hours || 48 }
+        });
+        this.lines = [];
+        this.toast.success('Reserva guardada en este dispositivo. Revisa su confirmación en Sincronización.');
+        if (navigator.onLine) await this.offline.sincronizar();
+        this.tab = 'list'; this.load();
+      } catch (error) {
+        this.toast.error(error instanceof Error ? error.message : 'No se pudo confirmar la reserva. Revisa Sincronización.');
+      } finally { this.submitting = false; }
+      return;
+    }
     this.api
       .createReservation({
         branch_id: this.form.branch_id,

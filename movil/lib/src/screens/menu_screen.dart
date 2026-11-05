@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/offline/sync_offline_service.dart';
 import '../services.dart';
+import '../widgets.dart';
 import 'assistant_screen.dart';
 import 'notifications_screen.dart';
 import 'orders_screen.dart';
@@ -10,6 +12,7 @@ import 'provider_screen.dart';
 import 'pos_screen.dart';
 import 'reports_screen.dart';
 import 'reservations_screen.dart';
+import 'offline_screen.dart';
 
 class MenuScreen extends StatelessWidget {
   final VoidCallback onLogout;
@@ -19,6 +22,26 @@ class MenuScreen extends StatelessWidget {
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Future<void> _syncOffline(BuildContext context) async {
+    final offline = SyncOfflineService();
+    try {
+      final pending = await offline.pendientes();
+      if (pending == 0) {
+        if (context.mounted) showSnack(context, 'No hay ventas offline pendientes.');
+        return;
+      }
+      final result = await offline.sincronizar();
+      final rows = (result['resultados'] as List?) ?? const [];
+      final confirmed =
+          rows.where((r) => r is Map && r['estado'] == 'CONFIRMADA').length;
+      if (context.mounted) {
+        showSnack(context, 'Sincronizadas $confirmed de $pending venta(s).');
+      }
+    } catch (e) {
+      if (context.mounted) showSnack(context, e.toString(), error: true);
+    }
   }
 
   @override
@@ -34,6 +57,9 @@ class MenuScreen extends StatelessWidget {
     sections.add(() => _Section(
           title: 'Cliente',
           children: [
+            if (user?.empresaId != null)
+              _Item(icon: Icons.cloud_sync_outlined, label: 'Catálogo offline y operaciones locales',
+                onTap: () => _push(context, const OfflineScreen())),
             _Item(
               icon: Icons.receipt_long,
               label: 'Mis pedidos (CU26)',
@@ -72,6 +98,11 @@ class MenuScreen extends StatelessWidget {
                 icon: Icons.event_available,
                 label: 'Atender reservas (CU15)',
                 onTap: () => _push(context, const ReservationsScreen()),
+              ),
+              _Item(
+                icon: Icons.cloud_sync_outlined,
+                label: 'Sincronizar ventas offline',
+                onTap: () => _syncOffline(context),
               ),
             ],
           ));

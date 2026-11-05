@@ -2,13 +2,15 @@
 
 import os
 import tempfile
+import uuid
+import atexit
 
-_TEST_DB = os.path.join(tempfile.gettempdir(), "fashionstore_test.db")
-if os.path.exists(_TEST_DB):
-    os.remove(_TEST_DB)
+_TEST_DB = os.path.join(tempfile.gettempdir(), f"fashionstore_test_{uuid.uuid4().hex}.db")
 
-os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_TEST_DB}")
 os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["ALLOW_DEMO_PASSWORD_RESET"] = "true"
+os.environ["GENAI_API_KEY"] = ""
 os.environ["BACKEND_CORS_ORIGINS"] = '["http://localhost:4200"]'
 
 import pytest
@@ -17,6 +19,27 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.models.user import Role, User
 from main import app
+
+
+@atexit.register
+def _cleanup_test_database():
+    from app.core.database import engine
+    engine.dispose()
+    if os.path.exists(_TEST_DB):
+        os.remove(_TEST_DB)
+
+
+def subscribe_empresa(db, empresa_id):
+    from datetime import date, timedelta
+    from app.models.tenant import Plan, Suscripcion
+
+    plan = db.query(Plan).filter(Plan.permite_reportes_ia.is_(True)).first()
+    if plan is None:
+        plan = Plan(nombre="Test Profesional", max_sucursales=10, permite_reportes_ia=True, permite_analitica_ml=True)
+        db.add(plan)
+        db.flush()
+    db.add(Suscripcion(empresa_id=empresa_id, plan_id=plan.id, estado="ACTIVA",
+        fecha_inicio=date.today(), fecha_vencimiento=date.today() + timedelta(days=30)))
 
 
 def _seed_users(db):

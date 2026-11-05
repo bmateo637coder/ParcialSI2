@@ -36,8 +36,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _submit() async {
     if (_method == 'TARJETA' &&
         (_cardController.text.replaceAll(' ', '').length < 12)) {
-      showSnack(context, 'Ingresa una tarjeta de prueba (ej. 4242 4242 4242 4242).',
-          error: true);
+      showSnack(
+        context,
+        'Ingresa una tarjeta de prueba (ej. 4242 4242 4242 4242).',
+        error: true,
+      );
       return;
     }
     setState(() => _loading = true);
@@ -64,8 +67,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     if (_order != null) {
       final order = _order!;
-      final paid = order.status == 'PAGADO' ||
-          order.payment?.status == 'COMPLETADO';
+      final paid = order.status == 'PAGADO';
       final declined =
           order.status == 'CANCELADO' && order.payment?.status == 'FALLIDO';
       return Scaffold(
@@ -76,37 +78,63 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             children: [
               const SizedBox(height: 24),
               Icon(
-                declined ? Icons.cancel : Icons.check_circle,
+                order.status == 'CANCELADO' ? Icons.cancel : Icons.check_circle,
                 size: 72,
-                color: declined ? const Color(0xFFC62828) : const Color(0xFF2E7D32),
+                color: order.status == 'CANCELADO'
+                    ? const Color(0xFFC62828)
+                    : const Color(0xFF2E7D32),
               ),
               const SizedBox(height: 16),
-              Text(declined ? 'Pago rechazado' : '¡Pedido confirmado!',
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                declined
+                    ? 'Pago rechazado'
+                    : order.status == 'CANCELADO'
+                    ? 'Compra cancelada'
+                    : '¡Pedido confirmado!',
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 8),
               if (declined)
-                const Text('La pasarela rechazó la tarjeta de prueba. El pedido '
-                    'quedó cancelado y no se hizo ningún cobro.' +
-                    '\n\nRevisa tus pedidos para reintentar el pago (CU19).')
+                const Text(
+                  'La pasarela rechazó la tarjeta de prueba. El pedido '
+                  'quedó cancelado y no se hizo ningún cobro.'
+                  '\n\nRevisa tus pedidos para reintentar el pago (CU19).',
+                )
               else ...[
                 Text('Pedido #${order.id} · ${order.receiptNumber ?? ''}'),
                 const SizedBox(height: 8),
-                Text('Total: ${money(order.total)}',
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF5B2333))),
-                if (!paid)
+                Text(
+                  'Total: ${money(order.total)}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF5B2333),
+                  ),
+                ),
+                if (!paid && order.status == 'PENDIENTE')
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
-                    child: Text('El pago quedó pendiente; puedes completarlo desde Mis pedidos.'),
+                    child: Text(
+                      'El pago quedó pendiente; puedes completarlo desde Mis pedidos.',
+                    ),
                   ),
               ],
+              if (order.refundedTotal > 0)
+                Text(
+                  'Reembolso confirmado: ${money(order.refundedTotal)}. Consulta el comprobante en Mis pedidos.',
+                ),
+              if (order.refundPending > 0)
+                Text(
+                  'Pendiente de devolver: ${money(order.refundPending)}. Su estado se muestra en Reembolsos.',
+                ),
               const SizedBox(height: 24),
               AppPrimaryButton(
                 label: 'Volver al inicio',
                 icon: Icons.home_outlined,
-                onPressed: () => Navigator.of(context)
-                    .pushNamedAndRemoveUntil('/home', (r) => false),
+                onPressed: () =>
+                    Navigator.of(context)
+                        .pushNamedAndRemoveUntil('/home', (r) => false),
               ),
             ],
           ),
@@ -122,8 +150,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Método de pago',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Método de pago',
+              style: Theme.of(context).textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -136,7 +167,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     onSelected: (_) => setState(() => _method = m),
                     selectedColor: const Color(0xFF5B2333),
                     labelStyle: TextStyle(
-                        color: _method == m ? Colors.white : null),
+                      color: _method == m ? Colors.white : null,
+                    ),
                   ),
               ],
             ),
@@ -152,14 +184,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              const Text('Tarjetas de prueba: 4242…4242 aprueba; '
-                  '4000 0000 0000 0002 declina.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Text(
+                'Tarjetas de prueba: 4242…4242 aprueba; '
+                '4000 0000 0000 0002 declina.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ],
             if (_method == 'PAYPAL' || _method == 'STRIPE' || _method == 'QR')
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('La pasarela sandbox aprobará la transacción automáticamente.'),
+                child: Text(
+                  'La pasarela sandbox aprobará la transacción automáticamente.',
+                ),
               ),
             const SizedBox(height: 12),
             TextFormField(
@@ -175,10 +211,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.all(14),
                 child: Column(
                   children: [
-                    _Line('Prendas (${cart.totalItems})', money(cart.totalAmount + cart.totalDiscount)),
+                    _Line(
+                      'Prendas (${cart.totalItems})',
+                      money(cart.totalAmount + cart.totalDiscount),
+                    ),
                     if (cart.totalDiscount > 0)
-                      _Line('Descuento', '-${money(cart.totalDiscount)}',
-                          color: const Color(0xFF2E7D32)),
+                      _Line(
+                        'Descuento',
+                        '-${money(cart.totalDiscount)}',
+                        color: const Color(0xFF2E7D32),
+                      ),
                     const Divider(),
                     _Line('Total a pagar', money(cart.totalAmount), bold: true),
                   ],
@@ -213,12 +255,19 @@ class _Line extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null)),
-          Text(value,
-              style: TextStyle(
-                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                color: color,
-              )),
+          Expanded(
+            child: Text(
+              label,
+              style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

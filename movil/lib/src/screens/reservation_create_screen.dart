@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/offline/sync_offline_service.dart';
+import '../api_client.dart';
 
 import '../models.dart';
 import '../services.dart';
@@ -25,6 +27,21 @@ class _ReservationCreateScreenState extends State<ReservationCreateScreen> {
   bool _loading = true;
   String? _error;
   bool _submitting = false;
+  final List<Map<String, dynamic>> _lines = [];
+
+  bool _addLine() {
+    if (_selected == null || _branchId == null) return false;
+    if (_lines.isNotEmpty && _lines.first['branch_id'] != _branchId) {
+      showSnack(context, 'Todas las prendas deben ser de la misma sucursal.', error: true);
+      return false;
+    }
+    setState(() {
+      _lines.add({'variant_id': _selected!.variantId, 'quantity': _quantity, 'precio': _selected!.price,
+        'nombre': _selected!.productName, 'branch_id': _branchId});
+      _selected = null; _quantity = 1;
+    });
+    return true;
+  }
 
   @override
   void initState() {
@@ -77,18 +94,28 @@ class _ReservationCreateScreenState extends State<ReservationCreateScreen> {
   }
 
   Future<void> _submit() async {
-    if (_selected == null || _branchId == null) {
+    if (_selected != null && !_addLine()) return;
+    if (_lines.isEmpty || _branchId == null) {
       showSnack(context, 'Selecciona prenda, talla/color y sucursal (CU13).',
           error: true);
       return;
     }
     setState(() => _submitting = true);
     try {
+      if (api.currentUser?.empresaId != null) {
+        final service = SyncOfflineService();
+        await service.registrarReservaOffline(sucursalId: _lines.first['branch_id'] as int, items: _lines);
+        if (mounted) setState(() => _lines.clear());
+        try { await service.sincronizar(); }
+        on ApiError catch (e) { if (e.status != 0) rethrow; }
+        if (!mounted) return;
+        showSnack(context, 'Reserva guardada. Consulta su confirmación en Operaciones locales.');
+        Navigator.of(context).pop();
+        return;
+      }
       await api.createReservation(
         branchId: _branchId!,
-        items: [
-          {'variant_id': _selected!.variantId, 'quantity': _quantity}
-        ],
+        items: [for (final line in _lines) {'variant_id': line['variant_id'] as int, 'quantity': line['quantity'] as int}],
       );
       if (!mounted) return;
       showSnack(context, 'Reserva creada ✓ (CU13)');
@@ -135,7 +162,7 @@ class _ReservationCreateScreenState extends State<ReservationCreateScreen> {
                         style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<AvailabilityItem>(
-                      value: _selected,
+                      initialValue: _selected,
                       isExpanded: true,
                       items: [
                         for (final a in _items)
@@ -192,6 +219,10 @@ class _ReservationCreateScreenState extends State<ReservationCreateScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
+                    OutlinedButton(onPressed: _selected == null ? null : _addLine, child: const Text('Agregar prenda a la reserva')),
+                    for (final line in _lines)
+                      ListTile(title: Text('${line['nombre']} × ${line['quantity']}'), trailing: IconButton(icon: const Icon(Icons.delete_outline),
+                        onPressed: () => setState(() => _lines.remove(line)))),
                     AppPrimaryButton(
                       label: 'Confirmar reserva',
                       icon: Icons.check_circle_outline,

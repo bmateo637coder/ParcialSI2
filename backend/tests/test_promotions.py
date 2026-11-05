@@ -47,6 +47,9 @@ def _make_product(client, admin_token: str, tag: str) -> dict:
     }, headers=_h(admin_token))
     assert variant.status_code == 201, variant.text
     variant_id = variant.json()["id"]
+    branch = client.post("/api/branches/", json={"name": f"Promo {tag}", "city": "Prueba"}, headers=_h(admin_token)).json()
+    inventory = client.post("/api/inventory/", json={"variant_id": variant_id, "branch_id": branch["id"], "available": 5}, headers=_h(admin_token))
+    assert inventory.status_code == 201, inventory.text
 
     return {"product_id": product["id"], "variant_id": variant_id}
 

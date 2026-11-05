@@ -25,6 +25,9 @@ class PaymentGateway:
     def charge(self, amount: float, method: str, metadata: dict | None = None) -> GatewayResult:
         raise NotImplementedError
 
+    def refund(self, transaction_id: str, amount: float, idempotency_key: str) -> GatewayResult:
+        raise NotImplementedError
+
 
 class SandboxPaymentGateway(PaymentGateway):
     """Simula la pasarela de Stripe (modo sandbox)."""
@@ -45,6 +48,13 @@ class SandboxPaymentGateway(PaymentGateway):
 
         transaction_id = f"pi_sandbox_{secrets.token_hex(8)}"
         return GatewayResult(True, transaction_id, None)
+
+    def refund(self, transaction_id: str, amount: float, idempotency_key: str) -> GatewayResult:
+        if not transaction_id or amount <= 0:
+            return GatewayResult(False, None, 'No hay un cobro válido para devolver')
+        import hashlib
+        reference = hashlib.sha256((transaction_id + ':' + idempotency_key).encode()).hexdigest()[:24]
+        return GatewayResult(True, 're_sandbox_' + reference)
 
 
 def get_gateway() -> PaymentGateway:

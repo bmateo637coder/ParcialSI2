@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Date, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -8,11 +8,12 @@ from .promotion import Promotion  # noqa: F401  (registro de modelos en la metad
 
 class Provider(Base):
     __tablename__ = "providers"
+    __table_args__ = (UniqueConstraint("empresa_id", "nit", name="uq_providers_empresa_nit"),)
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
     name = Column(String(150), nullable=False)
     contact_email = Column(String(100))
-    nit = Column(String(30), unique=True)
+    nit = Column(String(30))
     phone = Column(String(30))
     address = Column(String(180))
     is_active = Column(Boolean, default=True, nullable=False)
@@ -35,8 +36,10 @@ class Category(Base):
 
 class Season(Base):
     __tablename__ = "seasons"
+    __table_args__ = (UniqueConstraint("empresa_id", "name", name="uq_seasons_empresa_name"),)
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)  # ej. Primavera-Verano 2026
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)  # ej. Primavera-Verano 2026
     year = Column(Integer)
     description = Column(Text)
     start_date = Column(Date)
@@ -47,8 +50,10 @@ class Season(Base):
 
 class Collection(Base):
     __tablename__ = "collections"
+    __table_args__ = (UniqueConstraint("empresa_id", "name", name="uq_collections_empresa_name"),)
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
     season_id = Column(Integer, ForeignKey("seasons.id"))
     is_active = Column(Boolean, default=True, nullable=False)
     products = relationship("Product", back_populates="collection")
@@ -66,6 +71,7 @@ class Color(Base):
 class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text)
     base_price = Column(Float, nullable=False)

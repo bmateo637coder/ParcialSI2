@@ -1,0 +1,20 @@
+<div class="p-4">
+  <h2 class="text-xl font-bold mb-2">Conflictos de Sincronización</h2>
+  <button (click)="cargar()" class="mb-3 px-3 py-1 bg-gray-200 rounded">Actualizar</button>
+  <div *ngIf="cargando">Cargando...</div>
+  <div *ngIf="!cargando && conflictos.length === 0" class="text-gray-500">Sin conflictos pendientes</div>
+  <div class="space-y-3">
+    <div *ngFor="let c of conflictos" class="border p-3 rounded">
+      <div><strong>Conflicto #{{c.id}}</strong></div>
+      <div><strong>Motivo:</strong> {{c.motivo}}</div>
+      <div><strong>Solicitado:</strong> {{c.cantidad_solicitada ?? '—'}} · <strong>Disponible:</strong> {{c.stock_disponible ?? '—'}}</div>
+      <div><strong>Resuelto:</strong> {{c.resuelto ? 'SI' : 'NO'}}</div>
+      <div class="mt-2 flex items-center gap-2">
+        <label class="text-sm">Cantidad a aceptar</label>
+        <input type="number" min="1" [(ngModel)]="c.cantidadAjuste" class="border rounded px-2 py-1 w-24" />
+        <button (click)="resolver(c, 'RECHAZAR')" class="px-3 py-1 bg-red-600 text-white rounded">Rechazar</button>
+        <button (click)="resolver(c, 'AJUSTAR_CANTIDAD')" class="px-3 py-1 bg-yellow-600 text-white rounded">Ajustar y procesar</button>
+      </div>
+    </div>
+  </div>
+</div>

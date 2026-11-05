@@ -2,12 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, Branch } from './api.service';
 import { CommonModule } from '@angular/common';
+import { StoreSelectorComponent } from './store-selector.component';
 
 @Component({
   selector: 'app-branches',
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, StoreSelectorComponent],
   template: `
+  <app-store-selector (selected)="search()"></app-store-selector>
   <div class="page-head">
     <span class="eyebrow">Dónde encontrarnos</span>
     <h1>Nuestras sucursales</h1>
@@ -22,10 +24,15 @@ import { CommonModule } from '@angular/common';
     <div *ngFor="let s of [1,2,3]" class="skeleton" style="height:180px; border-radius:10px;"></div>
   </div>
 
-  <div class="empty-state" *ngIf="!loading && !branches.length">
+  <div class="empty-state" *ngIf="!loading && !branches.length && !error">
     <div class="empty-icon">📍</div>
     <h3>Sin resultados</h3>
     <p>No encontramos sucursales en "{{ city }}". Prueba con otra ciudad.</p>
+  </div>
+
+  <div class="empty-state" *ngIf="error" role="alert">
+    <h3>No se pudieron cargar las sucursales</h3>
+    <button class="btn btn-outline" (click)="search()">Reintentar</button>
   </div>
 
   <div class="grid" *ngIf="branches.length">
@@ -48,21 +55,29 @@ export class BranchesComponent implements OnInit {
   city = '';
   branches: Branch[] = [];
   loading = false;
+  error = false;
 
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
-    this.search();
+    if (this.api.isAuthenticated) this.search();
   }
 
   search(): void {
     this.loading = true;
+    this.error = false;
+    this.branches = [];
+    const storeId = this.api.storefrontId;
     this.api.getBranches(this.city).subscribe({
       next: (res) => {
+        if (!this.api.isAuthenticated && this.api.storefrontId !== storeId) return;
         this.branches = res;
         this.loading = false;
       },
-      error: () => (this.loading = false),
+      error: () => {
+        if (!this.api.isAuthenticated && this.api.storefrontId !== storeId) return;
+        this.loading = false; this.error = true;
+      },
     });
   }
 }

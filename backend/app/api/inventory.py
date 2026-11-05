@@ -2,10 +2,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_admin
+from app.core.money import money
+from app.core.storefront import get_catalog_context
+from app.core.security import get_current_business_user as get_current_user, get_optional_current_user, require_admin
+from app.core.tenant import ensure_tenant_owns, scope_to_empresa
 from app.models.branch import Branch
 from app.models.catalog import Product, ProductVariant
 from app.models.inventory import Inventory, InventoryMovement
@@ -18,6 +22,7 @@ from app.schemas import (
     InventoryResponse,
     InventoryUpdate,
 )
+from app.services.promotions import promotion_discount_for_variant
 
 router = APIRouter()
 
@@ -25,10 +30,40 @@ router = APIRouter()
 _STAFF_ROLES = {"Administrador", "Encargado de Sucursal", "Cajero"}
 
 
-def _get_inventory_or_404(db: Session, inventory_id: int) -> Inventory:
+@router.get('/reconciliation', summary='Conciliar existencias con sus movimientos')
+def reconcile_inventory(branch_id: int | None = None,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.role_name not in {'Administrador', 'Encargado de Sucursal'}:
+        raise HTTPException(403, 'Requiere administrador o encargado')
+    ledger = db.query(InventoryMovement.inventory_id.label('inventory_id'),
+        func.sum(InventoryMovement.quantity).label('balance'),
+        func.count(InventoryMovement.id).label('count')).group_by(InventoryMovement.inventory_id).subquery()
+    query = db.query(Inventory, Branch, Product, ledger.c.balance, ledger.c.count).join(Branch,
+        Inventory.branch_id == Branch.id).join(ProductVariant, Inventory.variant_id == ProductVariant.id).join(
+        Product, ProductVariant.product_id == Product.id).outerjoin(ledger, ledger.c.inventory_id == Inventory.id)
+    query = scope_to_empresa(query, Branch, user, include_global=False)
+    if branch_id is not None: query = query.filter(Inventory.branch_id == branch_id)
+    rows = [{'inventory_id': inv.id, 'variant_id': inv.variant_id, 'branch_name': branch.name,
+        'product_name': product.name, 'available': inv.available, 'ledger_balance': balance or 0,
+        'difference': inv.available - (balance or 0), 'movements': count or 0}
+        for inv, branch, product, balance, count in query.order_by(Inventory.id).all()]
+    return {'consistent': all(row['difference'] == 0 for row in rows), 'items': rows,
+        'checked': len(rows), 'differences': sum(row['difference'] != 0 for row in rows)}
+
+
+def _ensure_inventory_access(db: Session, inventory: Inventory, user, *, include_global: bool = True) -> None:
+    branch = db.get(Branch, inventory.branch_id)
+    variant = db.get(ProductVariant, inventory.variant_id)
+    product = db.get(Product, variant.product_id) if variant else None
+    ensure_tenant_owns(branch, user, include_global=False, label="Registro de inventario")
+    ensure_tenant_owns(product, user, include_global=True, label="Registro de inventario")
+
+
+def _get_inventory_or_404(db: Session, inventory_id: int, user=None, *, include_global: bool = True) -> Inventory:
     inv = db.get(Inventory, inventory_id)
     if inv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro de inventario no encontrado")
+    _ensure_inventory_access(db, inv, user, include_global=include_global)
     return inv
 
 
@@ -37,6 +72,7 @@ def _lock_inventory_row(db: Session, inventory: Inventory) -> Inventory:
     locked = (
         db.query(Inventory)
         .filter(Inventory.id == inventory.id)
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -114,15 +150,18 @@ def get_availability(
     branch_id: Optional[int] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_catalog_context),
 ):
     query = (
         db.query(Inventory, ProductVariant, Product, Branch)
         .join(ProductVariant, Inventory.variant_id == ProductVariant.id)
         .join(Product, ProductVariant.product_id == Product.id)
         .join(Branch, Inventory.branch_id == Branch.id)
-        .filter(Product.is_active.is_(True), ProductVariant.is_active.is_(True))
+        .filter(Product.is_active.is_(True), ProductVariant.is_active.is_(True), Branch.is_active.is_(True))
         .filter(Inventory.available > 0)
     )
+    query = scope_to_empresa(query, Branch, current_user, include_global=False)
+    query = scope_to_empresa(query, Product, current_user)
 
     if product_id:
         query = query.filter(Product.id == product_id)
@@ -147,7 +186,7 @@ def get_availability(
                 branch_name=branch.name if branch else None,
                 city=branch.city if branch else None,
                 available=inv.available,
-                price=variant.effective_price,
+                price=float(money(variant.effective_price) - money(promotion_discount_for_variant(db, variant)[1])),
             )
         )
     return results
@@ -176,6 +215,8 @@ def list_inventory(
         .join(Product, ProductVariant.product_id == Product.id)
         .join(Branch, Inventory.branch_id == Branch.id)
     )
+    query = scope_to_empresa(query, Branch, _admin, include_global=False)
+    query = scope_to_empresa(query, Product, _admin)
     if branch_id:
         query = query.filter(Inventory.branch_id == branch_id)
     if product_id:
@@ -216,10 +257,14 @@ def create_inventory(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    if not db.get(ProductVariant, payload.variant_id):
+    variant = db.get(ProductVariant, payload.variant_id)
+    if not variant:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Variante inválida")
-    if not db.get(Branch, payload.branch_id):
+    branch = db.get(Branch, payload.branch_id)
+    if not branch:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sucursal inválida")
+    ensure_tenant_owns(branch, _admin, include_global=False, label="Sucursal")
+    ensure_tenant_owns(variant.product, _admin, label="Producto")
 
     existing = (
         db.query(Inventory)
@@ -268,7 +313,8 @@ def update_inventory(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    inventory = _get_inventory_or_404(db, inventory_id)
+    inventory = _get_inventory_or_404(db, inventory_id, _admin, include_global=False)
+    inventory = _lock_inventory_row(db, inventory)
     delta = payload.available - inventory.available
     if delta != 0:
         apply_movement(
@@ -321,6 +367,8 @@ def list_movements(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requiere rol de administrador o de sucursal")
 
     query = db.query(InventoryMovement)
+    query = scope_to_empresa(query.join(Inventory, InventoryMovement.inventory_id == Inventory.id)
+        .join(Branch, Inventory.branch_id == Branch.id), Branch, user, include_global=False)
     if inventory_id:
         query = query.filter(InventoryMovement.inventory_id == inventory_id)
     if movement_type:
@@ -362,7 +410,7 @@ def create_movement(
     if user.role_name not in _STAFF_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requiere rol de administrador o de sucursal")
 
-    inventory = _get_inventory_or_404(db, payload.inventory_id)
+    inventory = _get_inventory_or_404(db, payload.inventory_id, user, include_global=False)
     movement_type = payload.movement_type
     quantity = payload.quantity
 

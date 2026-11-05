@@ -44,11 +44,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     });
     try {
       final now = DateTime.now();
-      final from =
-          DateTime(now.year, now.month - 1, now.day); // último mes
+      final from = DateTime(now.year, now.month - 1, now.day); // último mes
       final report = await api.getDashboard(
-        desde: '${from.year.toString().padLeft(4, '0')}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}',
-        hasta: '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        desde:
+            '${from.year.toString().padLeft(4, '0')}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}',
+        hasta:
+            '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
       );
       if (!mounted) return;
       setState(() {
@@ -67,7 +68,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _runVoice(String? preset) async {
     final command = preset ?? _voiceController.text.trim();
     if (command.isEmpty) {
-      showSnack(context, 'Escribe o selecciona un comando (CU24).', error: true);
+      showSnack(
+        context,
+        'Escribe o selecciona un comando (CU24).',
+        error: true,
+      );
       return;
     }
     setState(() {
@@ -128,8 +133,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const Icon(Icons.auto_awesome, color: Color(0xFF5B2333)),
                     const SizedBox(width: 10),
                     Expanded(
-                        child: Text(r.narrative!,
-                            style: const TextStyle(fontWeight: FontWeight.w500))),
+                      child: Text(
+                        r.narrative!,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -137,8 +145,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 8),
           _KpiGrid(kpis: r.kpis),
           const SizedBox(height: 16),
-          Text('Ventas por día',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'Ventas por día',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           Card(
             child: Padding(
@@ -147,8 +158,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text('Por categoría',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'Por categoría',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           for (final c in r.byCategory)
             Card(
@@ -159,13 +173,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ),
           const SizedBox(height: 12),
-          Text('Top productos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'Top productos',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           for (final t in r.topProducts)
             Card(
               child: ListTile(
-                leading: const Icon(Icons.star_outline, color: Color(0xFFC9A227)),
+                leading: const Icon(
+                  Icons.star_outline,
+                  color: Color(0xFFC9A227),
+                ),
                 title: Text(t.name),
                 trailing: Text('${t.units} u · ${money(t.revenue)}'),
               ),
@@ -235,7 +255,10 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <(String, String, IconData)>[
-      ('Ventas', money(kpis.totalSales), Icons.attach_money),
+      ('Ventas netas', money(kpis.totalSales), Icons.attach_money),
+      ('Cobros', money(kpis.grossSales), Icons.payments_outlined),
+      ('Devoluciones', money(kpis.refundAmount), Icons.undo),
+      ('Pendiente devolver', money(kpis.refundPending), Icons.schedule),
       ('Pedidos', '${kpis.totalOrders}', Icons.receipt_long),
       ('Ticket medio', money(kpis.avgOrder), Icons.show_chart),
       ('Reservas', '${kpis.reservations}', Icons.event_seat),
@@ -265,13 +288,20 @@ class _KpiGrid extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(value,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16)),
-                        Text(label,
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.grey)),
+                        Text(
+                          value,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -292,8 +322,10 @@ class _SalesBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (points.isEmpty) {
-      return const Text('Sin ventas en el período.',
-          style: TextStyle(color: Colors.grey));
+      return const Text(
+        'Sin ventas en el período.',
+        style: TextStyle(color: Colors.grey),
+      );
     }
     final maxV = points.map((p) => p.amount).reduce((a, b) => a > b ? a : b);
     return SizedBox(
@@ -308,15 +340,18 @@ class _SalesBars extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text('${p.amount.round()}',
-                        style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    Text(
+                      '${p.amount.round()}',
+                      style: const TextStyle(fontSize: 9, color: Colors.grey),
+                    ),
                     const SizedBox(height: 2),
                     Container(
                       height: maxV == 0 ? 2 : (p.amount / maxV) * 100,
                       decoration: const BoxDecoration(
                         color: Color(0xFF5B2333),
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -346,8 +381,10 @@ class _VoiceResult extends StatelessWidget {
         color: const Color(0xFFFFECB3),
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Text(result.message,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          child: Text(
+            result.message,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
         ),
       );
     }
@@ -373,12 +410,13 @@ class _VoiceResult extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             if (data != null) ...[
-              Text('Ventas en el período: ${money(data.kpis.totalSales)} '
-                  '(${data.kpis.totalOrders} pedidos)',
-                  style: const TextStyle(fontSize: 16)),
+              Text(
+                'Ventas en el período: ${money(data.kpis.totalSales)} '
+                '(${data.kpis.totalOrders} pedidos)',
+                style: const TextStyle(fontSize: 16),
+              ),
               const SizedBox(height: 8),
-              Text('Incluye:',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text('Incluye:', style: Theme.of(context).textTheme.titleSmall),
               for (final t in data.topProducts)
                 Text('• ${t.name}: ${t.units} u (${money(t.revenue)})'),
               for (final c in data.byCategory)

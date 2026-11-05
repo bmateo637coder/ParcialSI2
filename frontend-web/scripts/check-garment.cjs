@@ -1,0 +1,31 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Module = require('node:module');
+const ts = require('typescript');
+const file = path.resolve(__dirname, '../src/app/garment-image.ts');
+const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}});
+const moduleUnderTest = new Module(file); moduleUnderTest._compile(compiled.outputText, file);
+const {removeEdgeBackground, alphaBounds, coverGeometry} = moduleUnderTest.exports;
+const w=60,h=80,pixels=new Uint8ClampedArray(w*h*4).fill(255);
+function paint(x,y,r,g,b,a=255) {const i=(y*w+x)*4;pixels.set([r,g,b,a],i);}
+for(let y=10;y<70;y++) for(let x=12;x<48;x++) paint(x,y,25,80,180);
+for(let y=35;y<80;y++) for(let x=27;x<33;x++) paint(x,y,255,255,255);
+paint(20,20,255,255,255); // bolsillo blanco encerrado
+const output=removeEdgeBackground(pixels,w,h);
+assert.equal(output[3],0);
+assert.equal(output[(20*w+20)*4+3],255);
+assert.equal(output[(60*w+20)*4+3],255);
+assert.equal(output[(60*w+30)*4+3],0);
+assert.equal(pixels[3],255,'El original debe conservarse para restaurar.');
+assert.deepEqual(alphaBounds(output,w,h),{x:9,y:7,width:42,height:66});
+const transparent=new Uint8ClampedArray(400);transparent.set([255,10,10,160],44);
+assert.deepEqual(removeEdgeBackground(transparent,10,10),transparent);
+const white=new Uint8ClampedArray(400).fill(255);
+assert.deepEqual(removeEdgeBackground(white,10,10),white,'No eliminar una foto sin objeto distinguible.');
+assert.equal(alphaBounds(new Uint8ClampedArray(400),10,10),null);
+const geometry=coverGeometry(1280,720,640,800);
+assert.equal(geometry.scale,800/720);
+assert.ok(Math.abs(geometry.x+(1280*geometry.scale-640)/2)<.0001);
+assert.equal(geometry.y,0);
+console.log('PASS: fondo exterior, entrepierna, bolsillo blanco, transparencia, original, límites y geometría de cámara.');

@@ -17,7 +17,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_business_user as get_current_user, require_admin
+from app.core.tenant import ensure_tenant_owns, scope_to_empresa
 from app.models.catalog import Product, ProductProposal, Provider, ProviderAccount
 from app.models.user import User
 from app.schemas import (
@@ -50,6 +51,7 @@ def _get_account_or_404(db: Session, user: User) -> ProviderAccount:
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Tu usuario no está vinculado a ninguna empresa proveedora")
+    ensure_tenant_owns(db.get(Provider, account.provider_id), user, include_global=False, label="Proveedor")
     return account
 
 
@@ -137,7 +139,7 @@ def propose_product(payload: ProposalCreate, user: User = Depends(get_current_us
             summary="Ver propuestas (proveedor: solo las suyas; admin: todas)")
 def list_proposals(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if user.role_name == "Administrador":
-        rows = db.query(ProductProposal).order_by(ProductProposal.id.desc()).all()
+        rows = scope_to_empresa(db.query(ProductProposal).join(Provider), Provider, user, include_global=False).order_by(ProductProposal.id.desc()).all()
     else:
         _require_provider(user)
         account = _get_account_or_404(db, user)
@@ -171,7 +173,8 @@ def _get_proposal_or_404(db: Session, proposal_id: int) -> ProductProposal:
 
 
 def _resolve_proposal(db: Session, proposal: ProductProposal, new_status: str,
-                      admin_comment: str | None, create_product: bool) -> ProposalResponse:
+                      admin_comment: str | None, create_product: bool, admin: User) -> ProposalResponse:
+    ensure_tenant_owns(db.get(Provider, proposal.provider_id), admin, include_global=False, label="Propuesta")
     if proposal.status != "PENDIENTE":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"La propuesta ya fue procesada (estado: {proposal.status})")
@@ -180,6 +183,7 @@ def _resolve_proposal(db: Session, proposal: ProductProposal, new_status: str,
     proposal.processed_at = datetime.now(timezone.utc)
     if create_product:
         db.add(Product(
+            empresa_id=admin.empresa_id,
             name=proposal.name,
             description=proposal.description,
             base_price=proposal.base_price,
@@ -196,7 +200,7 @@ def _resolve_proposal(db: Session, proposal: ProductProposal, new_status: str,
 def approve_proposal(proposal_id: int, payload: ProposalReview,
                      _admin=Depends(require_admin), db: Session = Depends(get_db)):
     proposal = _get_proposal_or_404(db, proposal_id)
-    return _resolve_proposal(db, proposal, "APROBADA", payload.admin_comment, create_product=True)
+    return _resolve_proposal(db, proposal, "APROBADA", payload.admin_comment, create_product=True, admin=_admin)
 
 
 @router.patch("/proposals/{proposal_id}/reject", response_model=ProposalResponse,
@@ -204,7 +208,7 @@ def approve_proposal(proposal_id: int, payload: ProposalReview,
 def reject_proposal(proposal_id: int, payload: ProposalReview,
                     _admin=Depends(require_admin), db: Session = Depends(get_db)):
     proposal = _get_proposal_or_404(db, proposal_id)
-    return _resolve_proposal(db, proposal, "RECHAZADA", payload.admin_comment, create_product=False)
+    return _resolve_proposal(db, proposal, "RECHAZADA", payload.admin_comment, create_product=False, admin=_admin)
 
 
 @router.post("/accounts", response_model=ProviderAccountResponse,
@@ -221,6 +225,8 @@ def link_account(payload: ProviderAccountCreate, _admin=Depends(require_admin),
     provider = db.get(Provider, payload.provider_id)
     if provider is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor no encontrado")
+    ensure_tenant_owns(user, _admin, include_global=False, label="Usuario")
+    ensure_tenant_owns(provider, _admin, include_global=False, label="Proveedor")
     account = ProviderAccount(user_id=user.id, provider_id=provider.id)
     db.add(account)
     try:

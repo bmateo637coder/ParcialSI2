@@ -1,10 +1,13 @@
 import 'dart:typed_data';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:http/http.dart' as http;
+
+import '../garment_image.dart';
 
 class FittingRoomScreen extends StatefulWidget {
   final String productName;
@@ -27,6 +30,9 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
   PoseDetector? _detector;
   bool _cameraFailed = false;
   bool _processing = false;
+  bool _openingCamera = false;
+  int _cameraGeneration = 0;
+  String? _imageWarning;
 
   CameraDescription? _frontCam;
   CameraDescription? _backCam;
@@ -79,6 +85,7 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
   Future<void> _initCamera() async {
     try {
       final cameras = await availableCameras();
+      if (!mounted) return;
       if (cameras.isEmpty) {
         setState(() => _cameraFailed = true);
         return;
@@ -100,6 +107,7 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
   }
 
   Future<void> _openCamera(CameraDescription camera) async {
+    final generation = ++_cameraGeneration;
     final rotation = camera.lensDirection == CameraLensDirection.front
         ? (360 - camera.sensorOrientation) % 360
         : camera.sensorOrientation;
@@ -111,8 +119,8 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
     try {
       await controller.initialize();
       await controller.startImageStream(_processFrame);
-      if (!mounted) {
-        controller.dispose();
+      if (!mounted || generation != _cameraGeneration) {
+        await controller.dispose();
         return;
       }
       setState(() {
@@ -128,7 +136,7 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
         _offset = Offset.zero;
       });
     } catch (_) {
-      controller.dispose();
+      await controller.dispose();
       if (!mounted) return;
       setState(() {
         _cameraFailed = true;
@@ -138,26 +146,93 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
   }
 
   Future<void> _toggleCamera() async {
-    if (_controller == null) return;
+    if (_controller == null || _openingCamera) return;
     final next = _lens == CameraLensDirection.front ? _backCam : _frontCam;
     if (next == null) return;
     final old = _controller;
+    _openingCamera = true;
     setState(() => _controller = null);
-    old?.dispose();
-    await _openCamera(next);
+    try {
+      await old?.dispose();
+      if (mounted) await _openCamera(next);
+    } finally {
+      _openingCamera = false;
+    }
   }
 
   Future<void> _loadProductImage() async {
     final url = widget.imageUrl;
     if (url == null || url.trim().isEmpty) return;
     try {
-      final resp = await http.get(Uri.parse(url));
-      if (resp.statusCode != 200) return;
-      final codec = await ui.instantiateImageCodec(resp.bodyBytes);
-      final frame = await codec.getNextFrame();
-      if (!mounted) return;
-      setState(() => _productImage = frame.image);
-    } catch (_) {}
+      final resp = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15));
+      if (resp.statusCode != 200 || resp.bodyBytes.length > 10 * 1024 * 1024) {
+        throw StateError('image');
+      }
+      final codec = await ui.instantiateImageCodec(
+        resp.bodyBytes,
+        targetWidth: 640,
+        allowUpscaling: false,
+      );
+      late ui.FrameInfo frame;
+      try {
+        frame = await codec.getNextFrame();
+      } finally {
+        codec.dispose();
+      }
+      final raw = frame.image;
+      final rgba = await raw.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      if (rgba == null) {
+        raw.dispose();
+        throw StateError('rgba');
+      }
+      final pixels = removeGarmentBackground(
+        rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes),
+        raw.width,
+        raw.height,
+      );
+      final bounds = garmentAlphaBounds(pixels, raw.width, raw.height);
+      final width = bounds?.width ?? raw.width,
+          height = bounds?.height ?? raw.height;
+      final cropped = Uint8List(width * height * 4);
+      for (var y = 0; y < height; y++) {
+        final start =
+            ((y + (bounds?.top ?? 0)) * raw.width + (bounds?.left ?? 0)) * 4;
+        cropped.setRange(y * width * 4, (y + 1) * width * 4, pixels, start);
+      }
+      // decodeImageFromPixels espera canales premultiplicados por alfa.
+      for (var i = 0; i < cropped.length; i += 4) {
+        final alpha = cropped[i + 3] / 255;
+        for (var channel = 0; channel < 3; channel++) {
+          cropped[i + channel] = (cropped[i + channel] * alpha).round();
+        }
+      }
+      final ready = Completer<ui.Image>();
+      ui.decodeImageFromPixels(
+        cropped,
+        width,
+        height,
+        ui.PixelFormat.rgba8888,
+        ready.complete,
+      );
+      final image = await ready.future;
+      raw.dispose();
+      if (!mounted) {
+        image.dispose();
+        return;
+      }
+      _productImage?.dispose();
+      setState(() => _productImage = image);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _imageWarning = 'No se pudo cargar la foto de la prenda.',
+        );
+      }
+    }
   }
 
   Future<void> _processFrame(CameraImage frame) async {
@@ -177,6 +252,8 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
       final poses = await _detector!.processImage(input);
       if (poses.isNotEmpty && mounted) {
         _updatePose(poses.first, frame);
+      } else if (mounted && _hasPose) {
+        setState(() => _hasPose = false);
       }
     } catch (_) {
       // Un frame sin detectar no debe romper el stream.
@@ -189,7 +266,12 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
     final landmarks = pose.landmarks;
     final leftShoulder = landmarks[PoseLandmarkType.leftShoulder];
     final rightShoulder = landmarks[PoseLandmarkType.rightShoulder];
-    if (leftShoulder == null || rightShoulder == null) return;
+    if (leftShoulder == null ||
+        rightShoulder == null ||
+        leftShoulder.likelihood < .6 ||
+        rightShoulder.likelihood < .6) {
+      return;
+    }
 
     // Con rotación 90° el frame se vuelve vertical: ancho = alto del sensor.
     final portraitW = frame.height.toDouble();
@@ -286,8 +368,10 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
 
   @override
   void dispose() {
+    _cameraGeneration++;
     _detector?.close();
     _controller?.dispose();
+    _productImage?.dispose();
     super.dispose();
   }
 
@@ -297,7 +381,7 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
     final cameraLive = _controller != null && _controller!.value.isInitialized;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vestidor virtual (CU12)'),
+        title: const Text('Vestidor virtual'),
         actions: [
           if (cameraLive)
             IconButton(
@@ -331,7 +415,7 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
                           )
                         : CameraPreview(_controller!)
                   else if (_cameraFailed)
-                    _DemoAvatar(color: color, image: _productImage)
+                    _DemoAvatar(color: color)
                   else
                     const ColoredBox(color: Colors.black),
                   // Overlay de la prenda anclado al cuerpo detectado.
@@ -360,7 +444,9 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.55),
                             borderRadius: BorderRadius.circular(20),
@@ -370,7 +456,9 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
                                 ? 'Cuerpo detectado · arrastra para ajustar'
                                 : 'Mírate a la cámara para detectar el cuerpo',
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 12),
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -381,7 +469,9 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
                     bottom: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(12),
@@ -403,20 +493,28 @@ class _FittingRoomScreenState extends State<FittingRoomScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final entry in _palette.entries)
-                        ChoiceChip(
-                          label: Text(entry.key),
-                          selected: _color == entry.key,
-                          onSelected: (_) =>
-                              setState(() => _color = entry.key),
-                        ),
-                    ],
+                  if (_imageWarning != null) Text(_imageWarning!),
+                  const Text(
+                    'Referencia visual. El recorte funciona mejor con una prenda sola sobre fondo liso.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12),
                   ),
+                  if (_productImage == null)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (final entry in _palette.entries)
+                          ChoiceChip(
+                            label: Text(entry.key),
+                            selected: _color == entry.key,
+                            onSelected: _productImage != null
+                                ? null
+                                : (_) => setState(() => _color = entry.key),
+                          ),
+                      ],
+                    ),
                   Row(
                     children: [
                       const Text('Tamaño', style: TextStyle(fontSize: 12)),
@@ -484,11 +582,11 @@ class _GarmentPainter extends CustomPainter {
     final cy = centerFy * h + offset.dy;
     final shoulderW = widthFrac * w * scale;
 
-    if (image != null && hasPose) {
+    if (image != null) {
       // Dibujar la foto real del producto anclada a los hombros.
-      final dstW = shoulderW * 1.7;
+      final dstW = shoulderW * (hasPose ? 1.7 : 1.0);
       final dstH = dstW * (image!.height / image!.width);
-      final top = cy - dstH * 0.2;
+      final top = cy - dstH * (hasPose ? 0.15 : 0.5);
       final dst = Rect.fromLTWH(cx - dstW / 2, top, dstW, dstH);
 
       canvas.saveLayer(
@@ -497,17 +595,13 @@ class _GarmentPainter extends CustomPainter {
       );
       canvas.drawImageRect(
         image!,
-        Rect.fromLTWH(
-            0, 0, image!.width.toDouble(), image!.height.toDouble()),
+        Rect.fromLTWH(0, 0, image!.width.toDouble(), image!.height.toDouble()),
         dst,
         Paint(),
       );
       canvas.restore();
 
       // Marcadores de hombros para feedback de detección.
-      final dot = Paint()..color = Colors.amber;
-      canvas.drawCircle(Offset(cx - shoulderW / 2, cy), 4, dot);
-      canvas.drawCircle(Offset(cx + shoulderW / 2, cy), 4, dot);
       return;
     }
 
@@ -524,12 +618,24 @@ class _GarmentPainter extends CustomPainter {
     final path = Path()
       ..moveTo(rect.left, rect.top + rect.height * 0.1)
       ..quadraticBezierTo(
-          rect.center.dx - 10, rect.top, rect.center.dx, rect.top)
+        rect.center.dx - 10,
+        rect.top,
+        rect.center.dx,
+        rect.top,
+      )
       ..quadraticBezierTo(
-          rect.center.dx + 10, rect.top, rect.right, rect.top + rect.height * 0.1)
+        rect.center.dx + 10,
+        rect.top,
+        rect.right,
+        rect.top + rect.height * 0.1,
+      )
       ..lineTo(rect.right, rect.bottom)
-      ..quadraticBezierTo(rect.center.dx, rect.bottom + rect.height * 0.08,
-          rect.left, rect.bottom)
+      ..quadraticBezierTo(
+        rect.center.dx,
+        rect.bottom + rect.height * 0.08,
+        rect.left,
+        rect.bottom,
+      )
       ..close();
 
     canvas.drawPath(path, paint);
@@ -558,9 +664,8 @@ class _GarmentPainter extends CustomPainter {
 
 class _DemoAvatar extends StatelessWidget {
   final Color color;
-  final ui.Image? image;
 
-  const _DemoAvatar({required this.color, this.image});
+  const _DemoAvatar({required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -572,33 +677,28 @@ class _DemoAvatar extends StatelessWidget {
           children: [
             const Icon(Icons.face, size: 96, color: Color(0xFF9E9390)),
             const SizedBox(height: 4),
-            if (image != null)
-              RawImage(
-                image: image,
-                height: 150,
-                width: 120,
-                fit: BoxFit.contain,
-              )
-            else
-              Container(
-                width: 140,
-                height: 150,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.8),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
-                  ),
+            Container(
+              width: 140,
+              height: 150,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.8),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(30),
+                  topRight: Radius.circular(30),
                 ),
-                child:
-                    const Icon(Icons.checkroom, size: 60, color: Colors.white),
               ),
+              child: const Icon(Icons.checkroom, size: 60, color: Colors.white),
+            ),
             const SizedBox(height: 14),
-            const Text('Modo demostración: sin cámara disponible.',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const Text('Prueba el overlay de la prenda con distintos colores.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text(
+              'Modo demostración: sin cámara disponible.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Text(
+              'Arrastra la prenda y ajusta su tamaño visual.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
       ),

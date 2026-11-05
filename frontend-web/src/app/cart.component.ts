@@ -131,7 +131,7 @@ const FALLBACK_IMG =
   <div class="modal-backdrop" *ngIf="confirmed" (click.self)="confirmed = null">
     <div class="modal">
       <div class="modal-head">
-        <h3>{{ confirmed.status === 'CANCELADO' ? 'Pago rechazado' : '¡Pedido pagado!' }}</h3>
+        <h3>{{ confirmed.status === 'CANCELADO' ? 'Compra cancelada' : '¡Pedido pagado!' }}</h3>
         <button class="modal-close" (click)="confirmed = null">&times;</button>
       </div>
       <div class="modal-body">
@@ -150,7 +150,9 @@ const FALLBACK_IMG =
         </p>
         <p>Total: <strong>Bs. {{ confirmed.total | number: '1.2-2' }}</strong> vía {{ confirmed.payment?.method }}.</p>
 
-        <ng-container *ngIf="confirmed.status === 'CANCELADO'">
+        <p *ngIf="confirmed.refunded_total">Se devolvieron Bs. {{ confirmed.refunded_total | number:'1.2-2' }} al no poder completar la compra. Consulta el comprobante en Reembolsos.</p>
+        <p *ngIf="confirmed.refund_pending">El cobro se confirmó, pero la devolución de Bs. {{ confirmed.refund_pending | number:'1.2-2' }} sigue pendiente. Su estado se muestra en Reembolsos.</p>
+        <ng-container *ngIf="confirmed.status === 'CANCELADO' && confirmed.payment?.status === 'FALLIDO'">
           <p>La pasarela rechazó el pago, así que el pedido se canceló sin descuento de stock ni cobro.</p>
           <p style="margin-top:.5rem;">Verifica tu tarjeta y vuelve a intentar la compra.</p>
         </ng-container>

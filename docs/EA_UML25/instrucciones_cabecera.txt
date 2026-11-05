@@ -1,0 +1,131 @@
+/*
+FASHIONSTORE - GENERADOR DE MODELOS ICONIX / UML 2.5.1 PARA ENTERPRISE ARCHITECT
+Entrega: segunda presentación de Sistemas de Información II. 31/10/2026.
+
+COMO USAR ESTE ARCHIVO (se puede pegar COMPLETO, incluidos estos comentarios):
+1. En EA crea/abre tu proyecto .qea y selecciona un paquete en el Browser.
+2. Abre la ventana Scripting: Specialize > Tools > Script Library. En EA 17.2
+   el botón se llama "Script Library"; la ventana que abre se llama Scripting.
+3. Crea un grupo Normal y dentro un script de lenguaje JScript, NO JavaScript.
+4. Sustituye el contenido del script por TODO este archivo, guarda y ejecuta.
+5. Se crea un subpaquete "FashionStore - Parcial 2 - Diagramas por CU".
+   Los diagramas son elementos NATIVOS de EA, no imágenes ni código PlantUML.
+6. Para avanzar por bloques cambia FS_CONFIG.seccion o el rango de casos.
+   Ejecuta TODO primero para disponer de las referencias comunes. Si se corta,
+   ejecuta de nuevo: se identifican los objetos del generador y no se duplican.
+7. Expande "02 Diagramas por caso de uso" y elige una carpeta de CU1 a CU16.
+   Dentro están directamente 01 Robustez, 02 Secuencia principal,
+   03 Secuencia alternativa y 04 Clases. Los objetos auxiliares quedan en
+   "Elementos de los diagramas", sin mezclar las vistas con los participantes.
+   Las cuatro vistas generales están en "01 Diagramas generales".
+8. Exporta cada diagrama desde EA con Save Image / Copy Image to Clipboard
+   o Publish > Model Reports, según tu edición. Las vistas generales grandes
+   sirven como mapa; usa las vistas por paquete para insertarlas legibles.
+
+CONTENIDO CON LA CONFIGURACION PREDETERMINADA:
+ - 1 diagrama general de casos de uso + 4 vistas por paquete funcional.
+ - 1 diagrama de dependencias de paquetes.
+ - 1 modelo de dominio general + 8 vistas de dominio por paquete.
+ - 16 diagramas de robustez, uno por caso de uso CU1-CU16.
+ - 16 secuencias del escenario principal y 16 de un alternativo representativo
+   (no se afirma que estén dibujadas todas las combinaciones de excepciones).
+ - 1 diagrama general de clases de datos + 8 vistas de diseño por paquete.
+ - 16 diagramas de clases individuales, uno por CU, reutilizando sus
+   clasificadores boundary/control/entity y sus responsabilidades específicas.
+ - 1 vista de responsabilidades por capas. Total: 89 diagramas.
+   Los ocho paquetes de dominio y clases conservan entidades de apoyo del
+   proyecto; solo los cuatro paquetes funcionales contienen estos 16 CU.
+   "Robustez" es una técnica de ICONIX, expresada con objetos UML y
+   estereotipos boundary/control/entity en un diagrama Analysis de EA.
+   Los alternativos son interacciones separadas, con su guarda explícita;
+   no se fingen fragmentos alt mediante rectángulos o llamadas condicionales.
+   Los diagramas tienen ParentID=0 para que EA los muestre directamente en
+   su carpeta. Las secuencias conservan la trazabilidad del CU en sus notas.
+   El general usa el actor abstracto Personal de empresa; cada vista por módulo
+   detalla Administrador de empresa, Encargado y Cajero con sus permisos.
+   Las relaciones include/extend se muestran en esas vistas de detalle.
+
+FUENTES LEIDAS:
+ - Documento parcial si2 2da presentacion.pdf: 133 páginas.
+ - 2do parcial SI2 Primera entrega NIcolas.pdf: 151 páginas, solo orientación
+   de estructura. No se copian sus reglas de 24 horas ni sus casos YouShop.
+ - 2doParcial.qea: referencia de diagramas individuales de robustez,
+   secuencia y clases. Se respeta la numeración y el negocio de FashionStore.
+ - UML2.5.pdf y MetodoPesadesICONIX.pdf.
+ - Código FastAPI, modelos SQLAlchemy, Angular y persistencia Flutter actual.
+ - API oficial EA 17.2 (Diagram, Element, Connector, DiagramObject) y UML 2.5.1.
+   https://sparxsystems.com/enterprise_architect_user_guide/17.2/add-ins___scripting/diagram2.html
+   https://sparxsystems.com/enterprise_architect_user_guide/17.2/add-ins___scripting/element2.html
+   https://sparxsystems.com/enterprise_architect_user_guide/17.2/add-ins___scripting/connector2_2.html
+   https://sparxsystems.com/enterprise_architect_user_guide/17.2/add-ins___scripting/diagramobjects.html
+   https://www.omg.org/spec/UML/2.5.1
+
+ALCANCE Y NUMERACION DE ESTA ENTREGA:
+Se modelan únicamente los 16 casos de la segunda presentación, con la
+numeración 1-16 de las secciones 2.5/2.6, según lo solicitado por el usuario.
+ CU1 Gestionar empresas (tenants)
+ CU2 Gestionar planes de suscripción
+ CU3 Gestionar suscripción de empresa
+ CU4 Verificar límites del plan
+ CU5 Preparar dispositivo para uso offline
+ CU6 Consultar catálogo sin conexión
+ CU7 Registrar reserva sin conexión
+ CU8 Registrar venta de contado sin conexión
+ CU9 Consultar operaciones pendientes
+ CU10 Sincronizar operaciones pendientes
+ CU11 Gestionar conflictos y operaciones rechazadas
+ CU12 Gestionar cambio de prendas
+ CU13 Solicitar reporte generativo (texto o voz)
+ CU14 Exportar reporte (PDF / Excel)
+ CU15 Consultar dashboard analítico
+ CU16 Entrenar y evaluar modelos de ML
+La especificación repite CU15 para entrenamiento; se identifica como CU16,
+de acuerdo con la tabla de casos. Unifica el índice y las pantallas con esta
+numeración al actualizar el documento. No se generan los CU del primer parcial.
+Esta versión crea un submodelo separado para no mezclarlo con una ejecución
+anterior del generador. Los modelos anteriores se conservan sin modificarse.
+
+CRITERIOS Y DIFERENCIAS QUE NO DEBEN OCULTARSE EN LA DEFENSA:
+ - No se dibuja el propio Sistema como actor de sí mismo. CU4 es un
+   comportamiento incluido; conectividad y reloj son disparadores internos.
+   Actualizar inventario es responsabilidad de los controles comerciales.
+ - Iniciar sesión es precondición de los CU protegidos, no un include repetido.
+ - CU11 es una gestión posterior a sincronizar: no un extend que continúe
+   una interacción de CU10 que ya terminó. La IA externa de CU13 es opcional.
+ - El dominio es conceptual, sin métodos, PK/FK ni tipos de almacenamiento.
+   Puede mostrar conceptos como resultados de sincronización. No implica que
+   exista una tabla sync_log: hoy hay estado/respuesta en OperacionSync,
+   ConflictoSync y registro local. SolicitudReporte es también un concepto:
+   la implementación almacena el resultado en GeneratedReport.result_json.
+   La clase técnica refleja los campos reales.
+ - El dominio admite renovaciones conceptuales (historial de suscripciones);
+   la implementación tiene UNIQUE empresa_id en Suscripcion: una fila actual.
+ - Los controles de diseño representan responsabilidades lógicas. Las notas
+   indican módulos y funciones reales; no se afirma que existan esas clases
+   de servicio Python con los mismos nombres. Las clases entity proceden del
+   AST de los modelos reales. Sus operaciones adicionales son de diseño.
+ - RN14 del PDF usa 7 días; EXCHANGE_WINDOW_DAYS usa 15 por defecto. Se usa
+   plazoConfigurado. El saldo a favor/reembolso del PDF debe conciliarse con
+   las restricciones del cambio que actualmente acepta el backend.
+ - El PDF describe solo lectura tras vencer una suscripción. Las dependencias
+   actuales de negocio validan suscripción activa y pueden responder 403;
+   ese modo de solo lectura necesita conciliación, no se da por implementado.
+ - CU16 en el PDF corresponde al administrador de plataforma. Actualmente
+   /api/analitica/entrenar permite responsables de empresa con plan ML,
+   guarda AnalyticsRun por empresa y no tiene publicación/versionado aparte.
+   Se mantiene el actor normativo y se deja la diferencia en las notas de CU16.
+ - CU14 exporta reportes generados por CU13 en la implementación. La extensión
+   a reportes convencionales citada en el documento no se presenta como una
+   función ya existente ni como un CU adicional de esta entrega.
+ - ML implementado: regresión lineal y KMeans sobre datos sintéticos; evalúa
+   MAE, RMSE, R2 y silueta. El dashboard aplica modelos a stock/precios reales.
+ - Ante pérdida de respuesta, las operaciones se conservan ENVIADA con el mismo
+   UUID. No se eliminan ni se marca la venta confirmada sin respuesta del servidor.
+ - Los campos empresa_id anulables permiten datos globales/legados y la cuenta
+   de plataforma; las reglas del dominio exigen pertenencia de datos comerciales.
+
+El script solo agrega/actualiza su submodelo. No borra paquetes, diagramas,
+archivos ni bases de datos. No exporta imágenes automáticamente ni modifica el PDF.
+Si falla una llamada COM, la ventana Script indica dónde se detuvo; no se anuncia
+éxito completo. Se restablecen los indicadores de actualización de EA al finalizar.
+*/

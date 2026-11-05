@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { SyncOfflineService } from './core/offline/sync-offline.service';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ApiService, AvailabilityItem, Order } from './api.service';
@@ -17,7 +18,7 @@ interface PosLine {
   <div class="page-head">
     <span class="eyebrow">Registro de ventas en sucursal</span>
     <h1>Caja (POS)</h1>
-    <p class="lead">Registra una venta presencial por parte del cajero. (CU18)</p>
+    <p class="lead">Selecciona una sucursal, revisa los artículos y confirma el cobro.</p>
   </div>
 
   <div style="display:grid; grid-template-columns: 1fr 320px; gap: 1.5rem; align-items:start;" class="pos-layout">
@@ -77,7 +78,7 @@ interface PosLine {
 
       <div class="form-group" style="margin-bottom:.75rem;">
         <label class="form-label">Sucursal</label>
-        <select class="form-control" [(ngModel)]="branchId" (ngModelChange)="loadAvailability()">
+        <select class="form-control" [(ngModel)]="branchId" (ngModelChange)="changeBranch()" [disabled]="paying">
           <option [ngValue]="null">Elige la sucursal</option>
           <option *ngFor="let b of branches" [ngValue]="b.id">{{ b.name }} — {{ b.city }}</option>
         </select>
@@ -107,6 +108,12 @@ interface PosLine {
         <div class="form-hint">En sandbox, <code>4000000000000002</code> / <code>4000000000009995</code> se rechazan.</div>
       </div>
 
+      <div class="form-group" *ngIf="paymentMethod === 'EFECTIVO'">
+        <label class="form-label" for="cash-received">Efectivo recibido (Bs.)</label>
+        <input id="cash-received" class="form-control" type="number" min="0" step="0.01" [(ngModel)]="cashReceived" [disabled]="paying" placeholder="Importe entregado por el cliente">
+        <p>Cambio: <strong>Bs. {{ change | number:'1.2-2' }}</strong></p>
+      </div>
+      <p class="form-hint">Tarjetas y transferencias funcionan en modo de simulación.</p>
       <div style="display:flex; justify-content:space-between; margin:1rem 0;">
         <span style="color:var(--muted);">Total a cobrar</span>
         <strong style="font-size:1.15rem; color:var(--accent-dark);">Bs. {{ total | number: '1.2-2' }}</strong>
@@ -125,7 +132,7 @@ interface PosLine {
   <div class="modal-backdrop" *ngIf="result" (click.self)="result = null">
     <div class="modal">
       <div class="modal-head">
-        <h3>{{ result.status === 'PAGADO' ? '¡Venta registrada!' : 'Pago pendiente' }}</h3>
+        <h3>{{ result.status === 'PAGADO' ? '¡Venta registrada!' : result.status === 'PENDIENTE' ? 'Pago pendiente' : 'Compra cancelada' }}</h3>
         <button class="modal-close" (click)="result = null">&times;</button>
       </div>
       <div class="modal-body">
@@ -140,9 +147,15 @@ interface PosLine {
         </p>
         <p>Total: <strong>Bs. {{ result.total | number: '1.2-2' }}</strong> vía {{ result.payment?.method }}
           ({{ result.payment?.status }}).</p>
+        <table class="table"><tbody><tr *ngFor="let item of result.items"><td>{{ item.product_name }} · {{ item.size_name }} / {{ item.color_name }} × {{ item.quantity }}</td><td>Bs. {{ item.subtotal | number:'1.2-2' }}</td></tr></tbody></table>
+        <p *ngIf="result.payment?.method === 'EFECTIVO' && result.status === 'PAGADO'">Recibido: Bs. {{ result.payment?.cash_received | number:'1.2-2' }} · Cambio: <strong>Bs. {{ result.payment?.change_amount | number:'1.2-2' }}</strong></p>
 
-        <ng-container *ngIf="result.status !== 'PAGADO'">
+        <p *ngIf="result.refunded_total">Se registró un reembolso de Bs. {{ result.refunded_total | number:'1.2-2' }} porque la compra no pudo completarse.</p>
+        <p *ngIf="result.refund_pending">Hay Bs. {{ result.refund_pending | number:'1.2-2' }} pendientes de devolver. El encargado puede reintentar la operación desde Reembolsos.</p>
+        <ng-container *ngIf="result.status === 'PENDIENTE'">
           <p style="margin-top:.5rem;">La tarjeta fue rechazada. Puedes completar el pago con efectivo o esperar al cliente.</p>
+          <label class="form-label">Efectivo recibido (Bs.)</label>
+          <input class="form-control" type="number" min="0" step="0.01" [(ngModel)]="pendingCash" [disabled]="paying">
           <button class="btn btn-accent btn-block" (click)="payPendingCash()" [disabled]="paying">
             <span *ngIf="paying" class="spinner"></span> Completar con efectivo
           </button>
@@ -180,8 +193,21 @@ export class PosComponent implements OnInit {
   errorMsg = '';
   paying = false;
   result: Order | null = null;
+  cashReceived: number | null = null;
+  pendingCash: number | null = null;
+  private requestId = '';
+  private requestContent = '';
+  private availabilityRequest = 0;
+  private get retryKey(): string { return 'pos-pending-' + (this.api.currentUser.value?.id ?? 'none'); }
 
-  constructor(private api: ApiService, private toast: ToastService) {}
+  get change(): number { return Math.max(0, Math.round(((this.cashReceived ?? 0) - this.total) * 100) / 100); }
+
+  changeBranch(): void {
+    this.lines = []; this.selectedAv = null; this.cashReceived = null;
+    this.errorMsg = ''; this.loadAvailability();
+  }
+
+  constructor(private api: ApiService, private toast: ToastService, private offline: SyncOfflineService) {}
 
   get isAdmin(): boolean {
     return this.api.isAdmin;
@@ -201,6 +227,9 @@ export class PosComponent implements OnInit {
   }
 
   loadAvailability(): void {
+    const request = ++this.availabilityRequest;
+    this.selectedAv = null;
+    this.available = [];
     if (!this.branchId) {
       this.available = [];
       return;
@@ -208,23 +237,25 @@ export class PosComponent implements OnInit {
     this.loadingAv = true;
     this.api.getAvailability({ branch_id: this.branchId }).subscribe({
       next: (res) => {
+        if (request !== this.availabilityRequest) return;
         this.available = res;
         this.loadingAv = false;
       },
-      error: () => (this.loadingAv = false),
+      error: () => { if (request === this.availabilityRequest) { this.loadingAv = false; this.errorMsg = 'No se pudieron actualizar las existencias.'; } },
     });
   }
 
   addLine(): void {
-    if (!this.selectedAv) return;
-    const qty = Math.max(1, Math.floor(this.addQty || 1));
-    if (qty > this.selectedAv.available) {
+    if (!this.selectedAv || this.paying) return;
+    const qty = Number(this.addQty);
+    if (!Number.isInteger(qty) || qty < 1) { this.toast.info('Ingresa una cantidad entera mayor que cero.'); return; }
+    const existing = this.lines.find((l) => l.av.variant_id === this.selectedAv!.variant_id);
+    if (qty + (existing?.quantity ?? 0) > this.selectedAv.available) {
       this.toast.info(`Solo hay ${this.selectedAv.available} disponibles.`);
       return;
     }
-    const existing = this.lines.find((l) => l.av.variant_id === this.selectedAv!.variant_id);
     if (existing) {
-      existing.quantity = Math.min(existing.quantity + qty, this.selectedAv.available);
+      existing.quantity += qty;
     } else {
       this.lines.push({ av: this.selectedAv, quantity: qty });
     }
@@ -233,15 +264,16 @@ export class PosComponent implements OnInit {
   }
 
   removeLine(line: PosLine): void {
+    if (this.paying) return;
     this.lines = this.lines.filter((l) => l !== line);
   }
 
   lineSubtotal(line: PosLine): number {
-    return (line.av.price || 0) * line.quantity;
+    return Math.round((line.av.price || 0) * 100) * line.quantity / 100;
   }
 
   get total(): number {
-    return this.lines.reduce((sum, l) => sum + this.lineSubtotal(l), 0);
+    return this.lines.reduce((sum, l) => sum + Math.round(this.lineSubtotal(l) * 100), 0) / 100;
   }
 
   searchClients(): void {
@@ -255,22 +287,58 @@ export class PosComponent implements OnInit {
     });
   }
 
-  submit(): void {
-    if (!this.branchId || !this.lines.length) return;
+  async submit(): Promise<void> {
+    if (this.paying || !this.branchId || !this.lines.length) return;
     this.errorMsg = '';
+    if (this.paymentMethod === 'EFECTIVO' && (this.cashReceived == null || !Number.isFinite(this.cashReceived) || Math.round(this.cashReceived * 100) < Math.round(this.total * 100))) {
+      this.errorMsg = 'El efectivo recibido debe cubrir el total de la venta.'; return;
+    }
     this.paying = true;
-    this.api
-      .posSale({
+    if (!navigator.onLine && this.paymentMethod === 'EFECTIVO' && this.api.currentUser.value?.empresa_id) {
+      try {
+        await this.offline.registrarVentaOffline({
+          sucursalId: this.branchId,
+          clienteId: this.clientId ?? undefined,
+          items: this.lines.map(l => ({ variant_id: l.av.variant_id, quantity: l.quantity, precio: l.av.price, nombre: l.av.product_name })),
+          total: this.total,
+        });
+        this.lines = [];
+        this.cashReceived = null;
+        this.toast.success('Efectivo registrado en este dispositivo. La venta queda sujeta a confirmación.');
+        this.loadAvailability();
+      } catch (error) {
+        this.errorMsg = error instanceof Error ? error.message : 'No se pudo confirmar. Revisa Sincronización antes de repetir la venta.';
+      } finally { this.paying = false; }
+      return;
+    }
+    if (!navigator.onLine) {
+      this.errorMsg = 'Sin conexión solo se pueden registrar ventas en efectivo de una empresa.';
+      this.paying = false;
+      return;
+    }
+    const sale = {
         branch_id: this.branchId,
         items: this.lines.map((l) => ({ variant_id: l.av.variant_id, quantity: l.quantity })),
         client_id: this.clientId,
         payment_method: this.paymentMethod,
         card_number: this.paymentMethod === 'TARJETA' ? this.cardNumber.trim() || null : null,
-      })
+        cash_received: this.paymentMethod === 'EFECTIVO' ? this.cashReceived : null,
+    };
+    const content = JSON.stringify({ ...sale, card_number: null });
+    if (content !== this.requestContent || !this.requestId) {
+      let previous: {content?:string;id?:string} = {};
+      try { previous = JSON.parse(sessionStorage.getItem(this.retryKey) || '{}'); } catch {}
+      this.requestContent = content; this.requestId = previous.content === content && previous.id ? previous.id : crypto.randomUUID();
+      try { sessionStorage.setItem(this.retryKey,JSON.stringify({content,id:this.requestId})); } catch {}
+    }
+    this.api.posSale({ ...sale, request_id: this.requestId })
       .subscribe({
         next: (order) => {
           this.paying = false;
           this.result = order;
+          this.pendingCash = null;
+          this.requestId = ''; this.requestContent = ''; this.cashReceived = null;
+          try { sessionStorage.removeItem(this.retryKey); } catch {}
           this.lines = [];
           this.clientId = null;
           this.cardNumber = '';
@@ -286,17 +354,19 @@ export class PosComponent implements OnInit {
   }
 
   payPendingCash(): void {
-    if (!this.result) return;
+    if (!this.result || this.paying) return;
+    if (this.pendingCash == null || !Number.isFinite(this.pendingCash) || Math.round(this.pendingCash * 100) < Math.round(this.result.total * 100)) {
+      this.toast.info('El efectivo recibido debe cubrir el total pendiente.'); return;
+    }
     this.paying = true;
-    this.api.payOrder(this.result.id, { payment_method: 'EFECTIVO' }).subscribe({
+    this.api.payOrder(this.result.id, { payment_method: 'EFECTIVO', cash_received: this.pendingCash }).subscribe({
       next: (updated) => {
         this.paying = false;
         this.loadAvailability();
         this.toast.success(updated.status === 'PAGADO' ? 'Pago completado con efectivo.' : 'Pago no confirmado.');
         this.result = updated;
-        setTimeout(() => (this.result = null), 1200);
       },
-      error: () => (this.paying = false),
+      error: (err) => { this.paying = false; this.toast.info(typeof err.error?.detail === 'string' ? err.error.detail : 'No se pudo completar el pago. Revisa el estado del pedido antes de reintentar.'); },
     });
   }
 }

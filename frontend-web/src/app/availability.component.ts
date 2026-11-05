@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ApiService, AvailabilityItem } from './api.service';
 import { ToastService } from './toast.service';
+import { StoreSelectorComponent } from './store-selector.component';
 
 const FALLBACK_IMG =
   'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=300';
@@ -11,8 +12,9 @@ const FALLBACK_IMG =
 @Component({
   selector: 'app-availability',
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, StoreSelectorComponent],
   template: `
+  <app-store-selector (selected)="loadStore()"></app-store-selector>
   <div class="page-head">
     <span class="eyebrow">Disponibilidad en tiendas</span>
     <h1>¿Dónde está disponible?</h1>
@@ -96,20 +98,33 @@ export class AvailabilityComponent implements OnInit {
   constructor(private api: ApiService, private router: Router, private toast: ToastService) {}
 
   ngOnInit(): void {
-    this.api.getBranches().subscribe((bs) => (this.branches = bs));
+    if (this.api.isAuthenticated) this.loadStore();
+  }
+
+  loadStore(): void {
+    this.branchId = null;
+    this.branches = [];
+    this.rows = [];
+    const storeId = this.api.storefrontId;
+    this.api.getBranches().subscribe({
+      next: bs => { if (this.api.isAuthenticated || this.api.storefrontId === storeId) this.branches = bs; },
+      error: () => {},
+    });
     this.search();
   }
 
   search(): void {
     this.loading = true;
+    const storeId = this.api.storefrontId;
     this.api
       .getAvailability({ q: this.q, branch_id: this.branchId ?? undefined })
       .subscribe({
         next: (res) => {
+          if (!this.api.isAuthenticated && this.api.storefrontId !== storeId) return;
           this.rows = res;
           this.loading = false;
         },
-        error: () => (this.loading = false),
+        error: () => { if (this.api.isAuthenticated || this.api.storefrontId === storeId) this.loading = false; },
       });
   }
 

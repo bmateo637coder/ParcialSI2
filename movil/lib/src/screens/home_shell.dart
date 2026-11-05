@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../core/offline/sync_offline_service.dart';
 
 import '../services.dart';
 import 'menu_screen.dart';
@@ -16,14 +18,31 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   int _cartBadge = 0;
+  Timer? _syncTimer;
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) => _sync());
+    _sync();
     if (api.isAuthenticated && !api.isStaff && !api.isProvider) {
       _loadCartBadge();
     }
   }
+
+  Future<void> _sync() async {
+    if (_syncing || api.currentUser?.empresaId == null) return;
+    _syncing = true;
+    try {
+      await api.request('GET', '/health');
+      if (await SyncOfflineService().pendientes() > 0) await SyncOfflineService().sincronizar();
+    } catch (_) { /* Se conservan las operaciones hasta el siguiente intento. */ }
+    finally { _syncing = false; }
+  }
+
+  @override
+  void dispose() { _syncTimer?.cancel(); super.dispose(); }
 
   Future<void> _loadCartBadge() async {
     try {
@@ -49,7 +68,12 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      body: Column(children: [
+        ValueListenableBuilder<bool>(valueListenable: api.offline, builder: (context, offline, _) => offline
+          ? const SafeArea(bottom: false, child: Padding(padding: EdgeInsets.all(8), child: Text('Sin conexión: las existencias pueden haber cambiado. Consulta Operaciones locales para ver confirmaciones.')))
+          : const SizedBox.shrink()),
+        Expanded(child: IndexedStack(index: _index, children: pages)),
+      ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {

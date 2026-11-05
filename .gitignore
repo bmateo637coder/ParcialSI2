@@ -12,6 +12,8 @@ backend/venv/
 .env
 .env.local
 .env.production
+.env.*
+!.env.example
 
 # --- Node / Frontend ---
 node_modules/
@@ -33,3 +35,17 @@ movil/build/
 movil/android/.gradle/
 movil/android/build/
 *.iml
+
+# --- Datos locales y artefactos generados ---
+*.db-wal
+*.db-shm
+*.qea-wal
+*.qea-shm
+*.qea-journal
+*.dump
+*.backup
+*.keystore
+*.jks
+*.apk
+*.aab
+backend/static/downloads/

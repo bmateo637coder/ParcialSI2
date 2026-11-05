@@ -115,7 +115,7 @@ class ProductImage extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
+        errorBuilder: (_, _, _) => fallback,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
           return fallback;
@@ -157,7 +157,9 @@ class StatusBadge extends StatelessWidget {
         s.contains('PAGAD') ||
         s.contains('ENTREG') ||
         s.contains('APROB') ||
-        s.contains('COMPLET')) return const Color(0xFF2E7D32);
+        s.contains('COMPLET')) {
+      return const Color(0xFF2E7D32);
+    }
     return const Color(0xFF5B2333);
   }
 
@@ -195,7 +197,7 @@ class SectionHeader extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const Spacer(),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

@@ -14,6 +14,7 @@ import unicodedata
 
 from sqlalchemy import func
 
+from app.core.tenant import scope_to_empresa
 from app.models.branch import Branch
 from app.models.catalog import Product, ProductVariant
 from app.models.commerce import Order
@@ -44,7 +45,7 @@ def _latest_order(db, user_id: int) -> Order | None:
     )
 
 
-def _find_products(db, text: str, limit: int = 3) -> list[Product]:
+def _find_products(db, text: str, limit: int = 3, user=None) -> list[Product]:
     tokens = {
         "".join(ch for ch in t if ch.isalnum()) for t in text.split(" ")
         if len("".join(ch for ch in t if ch.isalnum())) >= 4
@@ -58,7 +59,7 @@ def _find_products(db, text: str, limit: int = 3) -> list[Product]:
         return []
     matches: list[Product] = []
     seen = set()
-    for product in db.query(Product).filter(Product.is_active.is_(True)).all():
+    for product in scope_to_empresa(db.query(Product), Product, user).filter(Product.is_active.is_(True)).all():
         name = _norm(product.name)
         if product.id in seen:
             continue
@@ -76,21 +77,22 @@ def _list_sizes(db) -> list[str]:
     return [s.name for s in db.query(Size).order_by(Size.name).all()]
 
 
-def _branches_summary(db) -> str:
-    rows = db.query(Branch).filter(Branch.is_active.is_(True)).all()
+def _branches_summary(db, user) -> str:
+    rows = scope_to_empresa(db.query(Branch), Branch, user, include_global=False).filter(Branch.is_active.is_(True)).all()
     if not rows:
         return ""
     parts = [f"{b.name} ({b.city}{', ' + b.address if b.address else ''})" for b in rows]
-    return "Cartagena, " if len(parts) == 1 else " ".join(parts)
+    return "; ".join(parts)
 
 
-def _product_listing_reply(db, products: list[Product]) -> str:
+def _product_listing_reply(db, products: list[Product], user) -> str:
     lines = []
     for product in products:
         total = (
             db.query(Inventory)
             .join(ProductVariant, ProductVariant.id == Inventory.variant_id)
-            .filter(ProductVariant.product_id == product.id, Inventory.available > 0)
+            .join(Branch, Branch.id == Inventory.branch_id)
+            .filter(Branch.empresa_id == user.empresa_id, ProductVariant.product_id == product.id, Inventory.available > 0)
             .count()
         )
         price = product.base_price or 0.0
@@ -101,12 +103,12 @@ def _product_listing_reply(db, products: list[Product]) -> str:
     return reply
 
 
-def _availability_lines(db, product: Product) -> list[str]:
+def _availability_lines(db, product: Product, user) -> list[str]:
     rows = (
         db.query(Branch, func.sum(Inventory.available).label("total"))
         .join(Inventory, Inventory.branch_id == Branch.id)
         .join(ProductVariant, ProductVariant.id == Inventory.variant_id)
-        .filter(ProductVariant.product_id == product.id, Inventory.available > 0)
+        .filter(Branch.empresa_id == user.empresa_id, ProductVariant.product_id == product.id, Inventory.available > 0)
         .group_by(Branch.id)
         .order_by(Branch.name)
         .all()
@@ -116,7 +118,7 @@ def _availability_lines(db, product: Product) -> list[str]:
     return [f"  - {b.name}: {int(total)} unidades" for b, total in rows]
 
 
-def _product_detail_reply(db, product: Product, text: str) -> str:
+def _product_detail_reply(db, product: Product, text: str, user) -> str:
     """Responde una pregunta de seguimiento sobre un producto concreto."""
     variants = [v for v in product.variants if v.is_active]
     if _contains(text, "talla", "tallas", "medida", "medidas", "que tallas"):
@@ -134,18 +136,19 @@ def _product_detail_reply(db, product: Product, text: str) -> str:
         return (f"La {product.name} tiene un precio base de ${price:,.2f}. "
                 "El precio final puede variar según la talla o color elegido.")
     if _contains(text, "dispon", "stock", "sucursal", "tienda", "donde", "hay"):
-        lines = "\n".join(_availability_lines(db, product))
+        lines = "\n".join(_availability_lines(db, product, user))
         return f"Disponibilidad de la {product.name}:\n{lines}"
-    return _product_listing_reply(db, [product])
+    return _product_listing_reply(db, [product], user)
 
 
-def _stock_reply(db) -> str:
-    branches = db.query(Branch).filter(Branch.is_active.is_(True)).count()
+def _stock_reply(db, user) -> str:
+    branches = scope_to_empresa(db.query(Branch), Branch, user, include_global=False).filter(Branch.is_active.is_(True)).count()
     total_msgs = (
         db.query(Product)
         .join(ProductVariant, ProductVariant.product_id == Product.id)
         .join(Inventory, Inventory.variant_id == ProductVariant.id)
-        .filter(Inventory.available > 0)
+        .join(Branch, Branch.id == Inventory.branch_id)
+        .filter(Inventory.available > 0, Branch.empresa_id == user.empresa_id)
         .count()
     )
     return (
@@ -203,7 +206,7 @@ _FALLBACK_SUGGESTIONS = [
 ]
 
 
-def _context_subject(db, history) -> Product | None:
+def _context_subject(db, history, user) -> Product | None:
     """Recupera la prenda que se venía hablando (última mencionada)."""
     if not history:
         return None
@@ -211,7 +214,7 @@ def _context_subject(db, history) -> Product | None:
         content = item["content"] if isinstance(item, dict) else getattr(item, "content", "")
         if not content:
             continue
-        products = _find_products(db, content, limit=1)
+        products = _find_products(db, content, limit=1, user=user)
         if products:
             return products[0]
     return None
@@ -262,7 +265,7 @@ def generate_answer(db, user, message: str, history=None) -> tuple[str, list[str
         )
 
     if _contains(text, "horario", "abre", "abierto", "abren", "cierra", "atencion", "apertura"):
-        branches = _branches_summary(db)
+        branches = _branches_summary(db, user)
         return (
             "Nuestras sucursales atienden de lunes a sábado de 10:00 a 20:00 y los "
             f"domingos de 11:00 a 19:00.{(' Contamos con: ' + branches + '.') if branches else ''}",
@@ -295,14 +298,14 @@ def generate_answer(db, user, message: str, history=None) -> tuple[str, list[str
             _CANCEL_SUGGESTIONS,
         )
 
-    products = _find_products(db, text)
+    products = _find_products(db, text, user=user)
     if products:
-        reply = _product_listing_reply(db, products)
+        reply = _product_listing_reply(db, products, user)
         return reply, _PRODUCT_SUGGESTIONS
 
-    subject = _context_subject(db, history)
+    subject = _context_subject(db, history, user)
     if subject is not None:
-        detail = _product_detail_reply(db, subject, text)
+        detail = _product_detail_reply(db, subject, text, user)
         if _contains(text, "talla", "tallas", "medidas", "color", "colores", "dispon",
                      "stock", "sucursal", "donde", "cuesta", "precio", "costo", "valor"):
             return detail, _PRODUCT_SUGGESTIONS
@@ -315,7 +318,7 @@ def generate_answer(db, user, message: str, history=None) -> tuple[str, list[str
             ["Hazme una recomendación", "¿Qué hay en stock?"],
         )
     if _contains(text, "dispon", "stock", "hay", "sucursal", "tienda"):
-        return _stock_reply(db), ["¿Qué prendas me recomiendas?", "¿Qué prendas hay?"]
+        return _stock_reply(db, user), ["¿Qué prendas me recomiendas?", "¿Qué prendas hay?"]
     if _contains(text, "precio", "cuanto cuesta", "costo", "valor"):
         return (
             "Puedes consultar el precio exacto de cada producto en el catálogo, donde "

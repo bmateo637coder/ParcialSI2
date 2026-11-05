@@ -44,6 +44,12 @@ import { ToastService } from './toast.service';
 
       <!-- REGISTER -->
       <form *ngIf="mode === 'register'" (ngSubmit)="register()" novalidate>
+        <label *ngIf="tiendas.length" class="form-group">Tienda
+          <select class="form-control" [(ngModel)]="regData.empresa_id" name="empresa" required>
+            <option [ngValue]="null">Selecciona tu tienda</option>
+            <option *ngFor="let tienda of tiendas" [ngValue]="tienda.id">{{ tienda.nombre }}</option>
+          </select>
+        </label>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Nombre</label>
@@ -74,7 +80,6 @@ import { ToastService } from './toast.service';
         <div class="form-group" *ngIf="!resetToken">
           <p style="color:var(--muted); font-size:.9rem; margin-bottom:1rem;">
             Escribe tu correo y te enviaremos un enlace para restablecer tu contraseña.
-            <em>Modo demo: el código se muestra en pantalla.</em>
           </p>
           <label class="form-label">Correo electrónico</label>
           <input class="form-control" type="email" [(ngModel)]="forgotEmail" name="forgotEmail" placeholder="ejemplo@correo.com">
@@ -121,13 +126,18 @@ export class AuthComponent {
   mode: 'login' | 'register' | 'forgot' = 'login';
   loading = false;
   loginData = { email: '', password: '' };
-  regData = { first_name: '', last_name: '', email: '', password: '' };
+  regData = { first_name: '', last_name: '', email: '', password: '', empresa_id: null as number | null };
+  tiendas: { id: number; nombre: string }[] = [];
   forgotEmail = '';
   resetToken = '';
   newPassword = '';
   resetMessage = '';
 
-  constructor(private api: ApiService, private router: Router, private toast: ToastService) {}
+  constructor(private api: ApiService, private router: Router, private toast: ToastService) {
+    const reset = new URLSearchParams(window.location.search).get('reset_token');
+    if (reset) { this.resetToken = reset; this.mode = 'forgot'; }
+    this.api.getTiendas().subscribe({ next: stores => this.tiendas = stores, error: () => {} });
+  }
 
   get validRegistration(): boolean {
     return !!(
@@ -135,6 +145,7 @@ export class AuthComponent {
       this.regData.last_name.trim() &&
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.regData.email) &&
       this.regData.password.length >= 6
+      && (!this.tiendas.length || this.regData.empresa_id)
     );
   }
 

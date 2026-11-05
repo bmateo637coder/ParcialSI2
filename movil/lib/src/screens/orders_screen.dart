@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../services.dart';
 import '../widgets.dart';
+import 'refunds_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -45,10 +46,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Future<void> _pay(Order order) async {
     try {
-      final updated =
-          await api.payOrder(order.id, order.payment?.method ?? 'TARJETA');
+      final updated = await api.payOrder(
+        order.id,
+        order.payment?.method ?? 'TARJETA',
+      );
       if (!mounted) return;
-      showSnack(context, 'Pago completado (CU19)');
+      showSnack(
+        context,
+        updated.status == 'PAGADO' ? 'Pago completado.' : 'Compra no completada. Revisa el estado del pago y los reembolsos.',
+      );
       setState(() {
         _orders = [
           for (final o in _orders)
@@ -83,76 +89,112 @@ class _OrdersScreenState extends State<OrdersScreen> {
       body: _loading
           ? const LoadingView()
           : _error != null
-              ? ErrorView(message: _error!, onRetry: _load)
-              : _orders.isEmpty
-                  ? const EmptyState(
-                      message: 'Todavía no tienes pedidos.',
-                      icon: Icons.receipt_long)
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: _orders.length,
-                      itemBuilder: (context, i) {
-                        final o = _orders[i];
-                        return Card(
-                          child: ExpansionTile(
-                            leading: const Icon(Icons.receipt_outlined,
-                                color: Color(0xFF5B2333)),
-                            title: Text('Pedido #${o.id} · ${o.receiptNumber ?? ''}',
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                    '${fmtDate(o.createdAt)} · ${o.orderType} · ${money(o.total)}'),
-                                const SizedBox(height: 2),
-                                StatusBadge(o.status),
-                              ],
-                            ),
+          ? ErrorView(message: _error!, onRetry: _load)
+          : _orders.isEmpty
+          ? const EmptyState(
+              message: 'Todavía no tienes pedidos.',
+              icon: Icons.receipt_long,
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.only(bottom: 16),
+              itemCount: _orders.length,
+              itemBuilder: (context, i) {
+                final o = _orders[i];
+                return Card(
+                  child: ExpansionTile(
+                    leading: const Icon(
+                      Icons.receipt_outlined,
+                      color: Color(0xFF5B2333),
+                    ),
+                    title: Text(
+                      'Pedido #${o.id} · ${o.receiptNumber ?? ''}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${fmtDate(o.createdAt)} · ${o.orderType} · ${money(o.total)}',
+                        ),
+                        const SizedBox(height: 2),
+                        StatusBadge(o.status),
+                      ],
+                    ),
+                    children: [
+                      for (final it in o.items)
+                        ListTile(
+                          dense: true,
+                          leading: ProductImage(url: it.imageUrl, size: 40),
+                          title: Text(it.productName ?? ''),
+                          subtitle: Text(
+                            '${it.sizeName ?? ''} ${it.colorName ?? ''}'
+                            ' × ${it.quantity}',
+                          ),
+                          trailing: Text(money(it.unitPrice * it.quantity)),
+                        ),
+                      if (o.payment != null)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.credit_card),
+                          title: Text('Pago (${o.payment!.method})'),
+                          trailing: StatusBadge(o.payment!.status),
+                        ),
+                      if (o.payment?.paidAt != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              for (final it in o.items)
-                                ListTile(
-                                  dense: true,
-                                  leading: ProductImage(url: it.imageUrl, size: 40),
-                                  title: Text(it.productName ?? ''),
-                                  subtitle: Text('${it.sizeName ?? ''} ${it.colorName ?? ''}'
-                                      ' × ${it.quantity}'),
-                                  trailing: Text(money(it.unitPrice * it.quantity)),
+                              Text(
+                                'Devuelto: ${money(o.refundedTotal)} · Neto: ${money(o.netTotal)}',
+                              ),
+                              if (o.refundPending > 0)
+                                Text(
+                                  'Pendiente de devolver: ${money(o.refundPending)}',
                                 ),
-                              if (o.payment != null)
-                                ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.credit_card),
-                                  title: Text('Pago (${o.payment!.method})'),
-                                  trailing: StatusBadge(o.payment!.status),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (o.payment != null &&
-                                        o.payment!.status == 'PENDIENTE')
-                                      TextButton.icon(
-                                        onPressed: () => _pay(o),
-                                        icon: const Icon(Icons.payment),
-                                        label: const Text('Pagar ahora'),
-                                      ),
-                                    if (o.status != 'CANCELADO' &&
-                                        o.status != 'COMPLETADO' &&
-                                        o.status != 'ENTREGADO')
-                                      TextButton.icon(
-                                        onPressed: () => _cancel(o),
-                                        icon: const Icon(Icons.cancel_outlined),
-                                        label: const Text('Cancelar'),
-                                      ),
-                                  ],
-                                ),
+                              OutlinedButton(
+                                onPressed: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => RefundsScreen(order: o),
+                                    ),
+                                  );
+                                  if (mounted) _load();
+                                },
+                                child: const Text('Reembolsos y devoluciones'),
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (o.payment != null &&
+                                o.payment!.status == 'PENDIENTE')
+                              TextButton.icon(
+                                onPressed: () => _pay(o),
+                                icon: const Icon(Icons.payment),
+                                label: const Text('Pagar ahora'),
+                              ),
+                            if (o.status != 'CANCELADO' &&
+                                o.status != 'COMPLETADO' &&
+                                o.status != 'ENTREGADO')
+                              TextButton.icon(
+                                onPressed: () => _cancel(o),
+                                icon: const Icon(Icons.cancel_outlined),
+                                label: const Text('Cancelar'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }

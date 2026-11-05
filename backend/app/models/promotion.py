@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, Date, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, Date, DateTime, ForeignKey
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -20,6 +20,7 @@ class Promotion(Base):
     __tablename__ = "promotions"
 
     id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
     name = Column(String(150), nullable=False)
     description = Column(Text)
     discount_type = Column(String(20), nullable=False)  # PERCENTAGE | FIXED

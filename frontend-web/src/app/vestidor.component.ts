@@ -1,726 +1,303 @@
-import { Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { Product } from './api.service';
-
-export const FALLBACK_GARMENT = '/img/garment.svg';
-
-export function buildOverlayTransform(scale: number, offsetX: number, offsetY: number, rotation: number): string {
-  const s = (scale || 100) / 100;
-  return `translate(-50%, -50%) translate(${offsetX || 0}px, ${offsetY || 0}px) scale(${s.toFixed(2)}) rotate(${rotation || 0}deg)`;
-}
-
-interface Tien {
-  name: string;
-  hex: string | null;
-}
-
-const TINTS: Tien[] = [
-  { name: 'Original', hex: null },
-  { name: 'Rojo', hex: '#c0392b' },
-  { name: 'Azul', hex: '#2c6fbb' },
-  { name: 'Verde', hex: '#2e7d32' },
-  { name: 'Amarillo', hex: '#d4a017' },
-  { name: 'Rosa', hex: '#d15c8d' },
-  { name: 'Negro', hex: '#232830' },
-];
-
-const SIZE_PRESETS = [
-  { name: 'S', scale: 90 },
-  { name: 'M', scale: 100 },
-  { name: 'L', scale: 115 },
-  { name: 'XL', scale: 130 },
-];
-
-/**
- * Caja de referencia de la prenda. El contorno (GARMENT_PATH) esta definido en
- * este espacio de coordenadas y se reutiliza tal cual en dos lugares:
- *   1. `clip-path: path(...)` del CSS (recorte en pantalla).
- *   2. `traceGarment()` del canvas (recorte de la foto capturada).
- * Ambos deben usar EXACTAMENTE la misma constante o la foto guardada no coincide
- * con lo que el usuario ve.
- */
-export const GARMENT_BOX = { w: 210, h: 250 };
-
-/**
- * Puntos de referencia de GARMENT_PATH que usa el auto-ancla para colocar la prenda
- * sobre el cuerpo con exactitud geometrica (en vez de un factor aproximado):
- *  - `GARMENT_SHOULDER_SPAN`: separacion entre los hombros de la silueta (x 40 -> 170).
- *  - `GARMENT_NECK_Y`: altura de la linea de hombros en el centro de la prenda.
- */
-export const GARMENT_SHOULDER_SPAN = 130;
-export const GARMENT_NECK_Y = 20;
-
-/**
- * Silueta de remera trazada con curvas (cuello, hombros, mangas y bajo redondeados)
- * en lugar de un poligono de vertices rectos: el recorte sigue el contorno real
- * de la prenda y no la corta en escalones.
- * Coordenadas en px dentro de GARMENT_BOX (210 x 250).
- */
-export const GARMENT_PATH =
-  'M 74 6 ' +
-  'C 88 25 122 25 136 6 ' +
-  'L 170 20 ' +
-  'C 187 26 200 34 206 46 ' +
-  'L 206 92 ' +
-  'C 196 99 184 101 172 100 ' +
-  'L 170 236 ' +
-  'Q 105 245 40 236 ' +
-  'L 38 100 ' +
-  'C 26 101 14 99 4 92 ' +
-  'L 4 46 ' +
-  'C 10 34 23 26 40 20 ' +
-  'Z';
-
-const POSE_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
-
-const SILHOUETTE_SVG = `
-<svg viewBox="0 0 260 520" xmlns="http://www.w3.org/2000/svg" class="silhouette">
-  <defs>
-    <linearGradient id="sil" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#dfe6ee"/>
-      <stop offset="1" stop-color="#b9c4d0"/>
-    </linearGradient>
-  </defs>
-  <g fill="url(#sil)">
-    <ellipse cx="130" cy="46" rx="30" ry="36"/>
-    <path d="M95 86 L70 92 L64 108 L84 106 L92 150 L112 152 L112 132 L116 132 L116 176 L108 176 L106 192 L90 208 L66 360 L84 372 L102 226 L112 216 L112 178 L148 178 L148 216 L158 226 L176 372 L194 360 L170 208 L154 192 L152 176 L144 176 L144 132 L148 132 L148 152 L168 150 L176 106 L196 108 L190 92 L165 86 L150 70 L130 66 L110 70 Z"/>
-  </g>
-</svg>`;
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ApiService, Product } from './api.service';
+import { alphaBounds, coverGeometry, removeEdgeBackground } from './garment-image';
 
 @Component({
-  selector: 'app-vestidor',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
+  selector: 'app-vestidor', standalone: true, imports: [CommonModule, FormsModule, RouterLink],
   template: `
-  <div class="page-head">
-    <span class="eyebrow">Vestidor virtual · CU12 · AR avanzado</span>
-    <h1>Prueba antes de comprar</h1>
-    <p class="lead" *ngIf="product">
-      Mostramos <strong>{{ product.name }}</strong> sobre tu cámara (o sobre una silueta demo).
-      Activa <em>Auto-ancla</em> para que la prenda se ajuste solo a tus hombros.
-    </p>
-    <p class="lead" *ngIf="!product">No recibimos la prenda seleccionada. Vuelve al catálogo y elige una.</p>
-  </div>
-
-  <div class="stages" *ngIf="product">
-    <div class="stage-wrap" #stage (pointerdown)="dragStart($event)" (pointermove)="dragMove($event)" (pointerup)="dragEnd()" (pointerleave)="dragEnd()">
-      <video #video autoplay playsinline muted *ngIf="mode === 'camera'"></video>
-      <div class="mode-demo" *ngIf="mode === 'demo'">
-        <div [innerHTML]="silhouette"></div>
-        <span class="mode-tag">Silueta demo (sin cámara)</span>
-      </div>
-
-      <div class="stage-frame" *ngIf="!capturing" [style.transform]="overlayTransform"
-        [style.--crop-x]="cropX + '%'" [style.--crop-y]="cropY + '%'">
-        <div class="tint" [hidden]="!activeTint.hex" [style.background]="activeTint.hex"></div>
-        <span class="frame-tint-label" *ngIf="activeTint.hex">{{ activeTint.name }}</span>
-        <img [src]="overlayImgSrc" [alt]="product!.name" [style.opacity]="opacityPct" [style.transform]="flip ? 'scaleX(-1)' : 'none'"
-          (error)="onImgError($event)">
-      </div>
-
-      <div class="pose-state" *ngIf="poseLoading"><div class="spinner"></div><span>Detectando postura…</span></div>
-      <div class="pose-state warn" *ngIf="poseError">
-        <span>{{ poseError }}</span>
-      </div>
-
-      <div class="cam-state" *ngIf="loadingCam || camError">
-        <div class="spinner" *ngIf="loadingCam"></div>
-        <span>{{ camError || 'Activando cámara…' }}</span>
-        <div class="cam-actions" *ngIf="!loadingCam">
-          <button class="btn btn-accent btn-sm" (click)="startCam()">Reintentar cámara</button>
-          <button class="btn btn-outline btn-sm" (click)="useDemo()">Usar silueta demo</button>
+    <header class="fitting-head"><div><span class="eyebrow">Tu espacio para probar</span><h1>Vestidor virtual</h1><p>{{ product?.name || 'Prueba una prenda a tu manera' }}</p></div><a routerLink="/" class="btn btn-outline">Volver al catálogo</a></header>
+    <div class="fitting-layout">
+      <section class="preview-panel" aria-label="Vista previa del vestidor">
+        <div class="preview-bar"><span class="mode-badge">{{ streaming ? 'Cámara en vivo' : 'Maniquí de referencia' }}</span><span>{{ autoFit && streaming ? 'Seguimiento activado' : 'Ajuste manual' }}</span></div>
+        <div class="stage"><canvas #stage width="640" height="800" aria-label="Prenda sobre el cuerpo. Arrastra para moverla." (pointerdown)="startDrag($event)" (pointermove)="drag($event)" (pointerup)="stopDrag()" (pointercancel)="stopDrag()"></canvas>
+          <p class="stage-empty" *ngIf="!garmentReady && !processing">Carga la imagen de una prenda para comenzar.</p><span class="processing" *ngIf="processing">Preparando la prenda…</span>
         </div>
-      </div>
-    </div>
-
-    <aside class="stage-controls card">
-      <h4 style="margin-bottom:.75rem;">Ajustes</h4>
-
-      <label class="switch-row">
-        <span>Auto-ancla a hombros</span>
-        <input type="checkbox" [(ngModel)]="autoFit" (ngModelChange)="toggleAutoFit()">
-      </label>
-      <label class="switch-row">
-        <span>Espejo</span>
-        <input type="checkbox" [(ngModel)]="flip">
-      </label>
-
-      <div class="group">
-        <span class="group-label">Talla</span>
-        <div class="chip-row">
-          <button *ngFor="let p of sizePresets" class="chip" [class.on]="selectedSize === p.name"
-            (click)="applySize(p)">{{ p.name }}</button>
-        </div>
-      </div>
-
-      <div class="group">
-        <span class="group-label">Color / tinte</span>
-        <div class="chip-row">
-          <button *ngFor="let c of tints" class="chip" [class.on]="activeTint === c"
-            (click)="applyTint(c)">{{ c.name }}</button>
-        </div>
-      </div>
-
-      <label class="slider-row">Tamaño <span class="slider-val">{{ scale }}%</span>
-        <input type="range" min="30" max="180" [(ngModel)]="scale">
-      </label>
-      <label class="slider-row">Horizontal <span class="slider-val">{{ offsetX }}px</span>
-        <input type="range" min="-160" max="160" [(ngModel)]="offsetX">
-      </label>
-      <label class="slider-row">Vertical <span class="slider-val">{{ offsetY }}px</span>
-        <input type="range" min="-160" max="160" [(ngModel)]="offsetY">
-      </label>
-      <label class="slider-row">Rotación <span class="slider-val">{{ rotation }}°</span>
-        <input type="range" min="-45" max="45" [(ngModel)]="rotation">
-      </label>
-      <label class="slider-row">Opacidad <span class="slider-val">{{ opacity }}%</span>
-        <input type="range" min="20" max="100" [(ngModel)]="opacity">
-      </label>
-
-      <div class="group crop-group">
-        <span class="group-label">Encuadre del recorte</span>
-        <label class="slider-row">Foto ↔ <span class="slider-val">{{ cropX }}%</span>
-          <input type="range" min="0" max="100" [(ngModel)]="cropX">
-        </label>
-        <label class="slider-row">Foto ↕ <span class="slider-val">{{ cropY }}%</span>
-          <input type="range" min="0" max="100" [(ngModel)]="cropY">
-        </label>
-        <button class="btn btn-outline btn-sm" type="button" (click)="resetCrop()">Centrar recorte</button>
-        <p class="form-hint">Ajusta hasta que la prenda de la foto encaje con el contorno. El recorte se aplica igual a la foto que descargas.</p>
-      </div>
-
-      <p class="form-hint" style="margin-top:.35rem;">Consejo: también puedes arrastrar la prenda con el mouse sobre el lienzo. Con Auto-ancla activo, la prenda sigue a tus hombros.</p>
-
-      <div class="controls-actions">
-        <button class="btn btn-accent" (click)="capture()" [disabled]="capturing">📷 Capturar foto</button>
-        <button class="btn btn-outline" (click)="goCatalog()">Volver al catálogo</button>
-      </div>
-      <div class="controls-actions" style="margin-top:.5rem;">
-        <button class="btn btn-accent" (click)="keepShopping()" [disabled]="!product">Elegir talla / reservar</button>
-        <button class="btn btn-outline" (click)="useDemo()" *ngIf="mode === 'camera'">Silueta demo</button>
-      </div>
-      <a class="download-link" *ngIf="shotUrl" [href]="shotUrl" [download]="'vestidor-' + (product.name || 'prenda').replace(/\\s+/g,'-').toLowerCase() + '.png'">
-        ⬇ Descargar mi prueba ({{ shotUrl.length < 100000 ? 'imagen ligera' : 'imagen completa' }})
-      </a>
-    </aside>
-  </div>
-  `,
+        <video #video muted playsinline class="source-video"></video>
+        <div class="preview-actions"><button class="btn btn-primary" (click)="startCamera()" [disabled]="starting || streaming">{{ starting ? 'Abriendo cámara…' : 'Usar mi cámara' }}</button><button class="btn btn-outline" (click)="useDemo()" [disabled]="!streaming && !starting">Usar maniquí</button><button class="btn btn-accent" (click)="capture()" [disabled]="!garmentReady || processing">Descargar foto</button></div>
+        <p class="hint">Arrastra la prenda sobre la vista previa. La imagen se procesa en tu dispositivo; las capturas se descargan únicamente cuando tú lo indicas.</p>
+        <p class="notice" role="status" *ngIf="cameraMessage">{{ cameraMessage }}</p>
+      </section>
+      <aside class="controls-panel">
+        <section class="control-section"><span class="step">01</span><h2>Prepara la prenda</h2>
+          <label class="upload-button" for="garment-upload">Cargar foto de una prenda<input id="garment-upload" type="file" accept="image/png,image/jpeg,image/webp" (change)="upload($event)"></label>
+          <p class="hint">Mejor resultado: prenda sola sobre fondo liso o PNG transparente. Una foto sobre una persona necesita corrección manual.</p>
+          <div class="editor checker"><canvas #editor width="480" height="480" aria-label="Editor de recorte de la prenda" (pointerdown)="editStart($event)" (pointermove)="editMove($event)" (pointerup)="editEnd($event)" (pointercancel)="cancelEdit()"></canvas></div>
+          <div class="editor-tools" role="group" aria-label="Herramientas de recorte"><button *ngFor="let tool of tools" class="tool" [class.selected]="editTool === tool.id" [attr.aria-pressed]="editTool === tool.id" (click)="editTool = tool.id">{{ tool.label }}</button></div>
+          <label class="range-label">Tamaño del pincel <span>{{ brush }} px</span><input type="range" min="4" max="90" [(ngModel)]="brush"></label>
+          <label class="range-label">Tolerancia del fondo <span>{{ tolerance }}</span><input type="range" min="8" max="85" [(ngModel)]="tolerance"></label>
+          <div class="button-row"><button class="btn btn-outline btn-sm" (click)="removeBackground()" [disabled]="!garmentReady">Quitar fondo</button><button class="btn btn-outline btn-sm" (click)="undo()" [disabled]="!undoStack.length">Deshacer</button><button class="btn btn-outline btn-sm" (click)="restoreOriginal()" [disabled]="!garmentReady">Original</button></div>
+          <p class="hint">Borrar elimina restos del fondo; restaurar recupera partes de la foto original. Recortar conserva solo el rectángulo que dibujes. Quitar fondo vuelve a partir de la foto original.</p>
+        </section>
+        <section class="control-section"><span class="step">02</span><h2>Ajusta sobre el cuerpo</h2>
+          <label class="range-label">Tipo de prenda<select class="form-control" [(ngModel)]="kind" (ngModelChange)="resetPosition()"><option value="top">Parte superior</option><option value="bottom">Pantalón o falda</option><option value="dress">Vestido o prenda completa</option></select></label>
+          <label class="range-label">Tamaño visual <span>{{ scale }} %</span><input type="range" min="30" max="220" [(ngModel)]="scale"></label>
+          <label class="range-label">Giro <span>{{ rotation }}°</span><input type="range" min="-90" max="90" [(ngModel)]="rotation"></label>
+          <label class="range-label">Opacidad <span>{{ opacity }} %</span><input type="range" min="20" max="100" [(ngModel)]="opacity"></label>
+          <label class="check-label"><input type="checkbox" [(ngModel)]="mirrorGarment"> Voltear la prenda horizontalmente</label>
+          <label class="check-label"><input type="checkbox" [(ngModel)]="autoFit" (ngModelChange)="toggleTracking()" [disabled]="!streaming"> Seguir hombros y cadera</label>
+          <button class="btn btn-outline btn-sm" (click)="resetPosition()">Centrar y restablecer ajuste</button>
+          <p class="hint">El tamaño es una referencia visual. Revisa las medidas y la talla de la variante antes de comprar. El seguimiento corporal requiere internet.</p>
+        </section>
+        <p class="notice" role="alert" *ngIf="imageMessage">{{ imageMessage }}</p>
+      </aside>
+    </div>`,
   styles: [`
-    :host { display: block; padding-bottom: 2rem; }
-    .stages { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; max-width: 1020px; margin: 1rem auto 0; }
-    .stage-wrap { position: relative; flex: 1 1 500px; min-height: 340px; background:
-      radial-gradient(circle at 30% 20%, #24303f, #0d1117); border-radius: 16px;
-      overflow: hidden; cursor: grab; touch-action: none; aspect-ratio: 4 / 5; }
-    .stage-wrap:active { cursor: grabbing; }
-    .stage-wrap video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
-    .mode-demo { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 1rem; color:#cbd5e1; }
-    .mode-demo .silhouette { height: 100%; filter: brightness(.85); }
-    .mode-tag { position: absolute; top: .75rem; left: .75rem; background: rgba(0,0,0,.55); color:#fff; font-size:.72rem; padding:.3rem .6rem; border-radius: 999px; }
-    .stage-frame { position: absolute; left: 50%; top: 50%; width: 210px; aspect-ratio: 210 / 250;
-      will-change: transform; pointer-events: none;
-      clip-path: path('M 74 6 C 88 25 122 25 136 6 L 170 20 C 187 26 200 34 206 46 L 206 92 C 196 99 184 101 172 100 L 170 236 Q 105 245 40 236 L 38 100 C 26 101 14 99 4 92 L 4 46 C 10 34 23 26 40 20 Z');
-      filter: drop-shadow(0 12px 18px rgba(0,0,0,.4)); }
-    .stage-frame img { width: 100%; height: 100%; display: block; object-fit: cover;
-      object-position: var(--crop-x, 50%) var(--crop-y, 30%); }
-    .tint { position: absolute; inset: -1px; pointer-events: none; mix-blend-mode: color; opacity: .72; }
-    .frame-tint-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      text-shadow: 0 1px 3px rgba(0,0,0,.7); color: #fff; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
-      text-transform: uppercase; opacity: .85; }
-    .pose-state { position: absolute; left: .75rem; bottom: .75rem; display:flex; gap:.4rem; align-items:center;
-      color:#fff; background: rgba(0,0,0,.55); font-size:.75rem; padding:.35rem .7rem; border-radius:999px; }
-    .pose-state .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation: spin 1s linear infinite; }
-    .pose-state.warn { color:#ffd166; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .cam-actions { display:flex; gap:.5rem; align-items:center; justify-content:center; flex-wrap:wrap; }
-    .cam-state { position: absolute; inset: 0; display: flex; flex-direction: column; gap: .6rem; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); text-align: center; padding: 1rem; }
-    .cam-state .spinner { width: 26px; height: 26px; border: 3px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius: 50%; animation: spin 1s linear infinite; }
-    .stage-controls { flex: 0 1 330px; }
-    .switch-row { display: flex; justify-content: space-between; align-items: center; font-size: .9rem; margin-bottom: .6rem; color: var(--text, #222); }
-    .switch-row input { accent-color: var(--accent, #e63946); }
-    .group { margin-bottom: .8rem; }
-    .group-label { display:block; font-size:.8rem; color: var(--muted,#666); margin-bottom:.3rem; }
-    .chip-row { display:flex; flex-wrap:wrap; gap:.4rem; }
-    .chip { border:1px solid var(--line,#ddd); background:#fff; color:var(--text,#222); border-radius:999px; padding:.25rem .7rem; font-size:.8rem; cursor:pointer; }
-    .chip.on { background: var(--accent,#e63946); border-color: var(--accent,#e63946); color:#fff; }
-    .slider-row { display: block; font-size: .9rem; margin-bottom: .8rem; color: var(--muted, #666); }
-    .slider-row .slider-val { float: right; font-weight: 600; color: var(--text, #222); }
-    .slider-row input[type=range] { width: 100%; margin-top: .25rem; accent-color: var(--accent, #e63946); }
-    .controls-actions { display: flex; gap: .5rem; margin-top: .25rem; flex-wrap: wrap; }
-    .download-link { display: block; margin-top: .8rem; font-size: .85rem; color: var(--accent,#e63946); font-weight: 600; }
-  `],
+    :host{display:block;color:var(--text,#1e293b)}.fitting-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:1rem 0 1.5rem}.fitting-head h1{margin:.3rem 0;font-size:2rem}.fitting-head p{color:var(--muted)}
+    .fitting-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:1.5rem;align-items:start}.preview-panel{position:sticky;top:1rem;background:#fff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden}.preview-bar{padding:.9rem 1rem;display:flex;justify-content:space-between;gap:.5rem;font-size:.78rem;color:#64748b}.mode-badge{color:#16655b;background:#e0f1ec;border-radius:20px;padding:.25rem .65rem}.stage{position:relative;background:#eef2f6;display:flex;justify-content:center}.stage canvas{display:block;width:100%;max-height:68vh;object-fit:contain;touch-action:none;cursor:grab}.stage canvas:active{cursor:grabbing}.stage-empty,.processing{position:absolute;top:42%;left:12%;right:12%;text-align:center;padding:1rem;background:#ffffffed;border-radius:12px;color:#334155}.source-video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.preview-actions{display:flex;gap:.5rem;flex-wrap:wrap;padding:1rem}.preview-panel>.hint,.preview-panel>.notice{margin:0 1rem 1rem}.controls-panel{display:grid;gap:1rem}.control-section{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:1.2rem}.control-section h2{font-size:1.1rem;display:inline;margin-left:.5rem}.step{font-size:.8rem;border-radius:50%;padding:.4rem;background:#eef2f6;color:#64748b}.upload-button{display:block;margin:1.2rem 0 .6rem;border:1px dashed #9baebd;border-radius:10px;padding:.7rem;cursor:pointer;font-size:.9rem}.upload-button input{display:block;font-size:.75rem;max-width:100%;margin-top:.4rem}.hint{font-size:.78rem;line-height:1.6;color:#64748b;margin:.7rem 0}.editor{margin-top:.8rem;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;line-height:0}.checker{background-color:#fff;background-image:linear-gradient(45deg,#e5e7eb 25%,transparent 25%),linear-gradient(-45deg,#e5e7eb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e7eb 75%),linear-gradient(-45deg,transparent 75%,#e5e7eb 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.editor canvas{width:100%;max-height:300px;object-fit:contain;touch-action:none;cursor:crosshair}.editor-tools,.button-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.65rem}.tool{background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:.4rem .7rem;cursor:pointer;color:#334155}.tool.selected{background:#164e63;border-color:#164e63;color:white}.range-label{display:block;font-size:.82rem;margin:.9rem 0;color:#475569}.range-label span{float:right;font-variant-numeric:tabular-nums}.range-label input[type=range]{display:block;width:100%;margin-top:.4rem;accent-color:#16655b}.range-label select{margin-top:.5rem}.check-label{display:flex;gap:.6rem;align-items:center;font-size:.84rem;margin:1rem 0}.notice{background:#fff7e5;border:1px solid #f0d9a6;border-radius:10px;padding:.75rem;font-size:.84rem;color:#78551a}.btn:disabled{opacity:.5}
+    @media(max-width:850px){.fitting-layout{grid-template-columns:1fr}.preview-panel{position:static}.stage canvas{max-height:60vh}.fitting-head{align-items:flex-start}.fitting-head h1{font-size:1.6rem}.preview-bar{font-size:.7rem}.controls-panel{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}}
+  `]
 })
-export class VestidorComponent implements OnInit, OnDestroy {
-  product: Product | null = null;
-  fallbackImg = FALLBACK_GARMENT;
-  silhouette = SILHOUETTE_SVG;
-  tints = TINTS;
-  sizePresets = SIZE_PRESETS;
-
-  mode: 'camera' | 'demo' = 'camera';
-  loadingCam = false;
-  streaming = false;
-  starting = false;
-  camError = '';
-  capturing = false;
-  shotUrl = '';
-
-  scale = 100;
-  offsetX = 0;
-  offsetY = 0;
-  rotation = 0;
-  opacity = 100;
-  flip = false;
-  autoFit = true;
-  cropX = 50;
-  cropY = 30;
-  selectedSize = 'M';
-  activeTint = TINTS[0];
-
-  poseLoading = false;
-  poseError = '';
-  private poseReady = false;
-  private detector: any = null;
-  private rafId: number | null = null;
-  private anchorUpdate: { x: number; y: number; fit: number } | null = null;
-
-  private stream: MediaStream | null = null;
-  private dragging = false;
-  private dragStartX = 0;
-  private dragStartY = 0;
-  private dragOffsetX = 0;
-  private dragOffsetY = 0;
-
+export class VestidorComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('stage') stage!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('editor') editor!: ElementRef<HTMLCanvasElement>;
   @ViewChild('video') video!: ElementRef<HTMLVideoElement>;
-  @ViewChild('stage') stage!: ElementRef<HTMLElement>;
-
-  constructor(private router: Router, private ngZone: NgZone) {}
-
-  get opacityPct(): number {
-    return (this.opacity || 100) / 100;
-  }
-
-  get overlayImgSrc(): string {
-    const src = this.product?.image_url;
-    return src && src.trim() ? src : this.fallbackImg;
-  }
-
-  get tintColor(): string | null {
-    return this.activeTint?.hex || null;
-  }
-
-  get overlayTransform(): string {
-    const s = ((this.scale || 100) / 100) * this.fitFactor;
-    const dx = (this.offsetX || 0) + (this.autoFit && this.anchorUpdate ? this.anchorUpdate.x : 0);
-    const dy = (this.offsetY || 0) + (this.autoFit && this.anchorUpdate ? this.anchorUpdate.y : 0);
-    return `translate(-50%, -50%) translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${s.toFixed(2)}) rotate(${this.rotation || 0}deg)`;
-  }
-
-  private get fitFactor(): number {
-    return this.autoFit && this.anchorUpdate ? this.anchorUpdate.fit : 1;
-  }
+  product: Product | null = null;
+  garmentReady = false; processing = false; starting = false; streaming = false;
+  cameraMessage = ''; imageMessage = ''; scale = 100; rotation = 0; opacity = 95;
+  kind = 'top'; mirrorGarment = false; autoFit = false; tolerance = 32; brush = 28;
+  editTool = 'erase'; tools = [{id:'erase',label:'Borrar'},{id:'restore',label:'Restaurar'},{id:'crop',label:'Recortar'}];
+  undoStack: ImageData[] = [];
+  private source = document.createElement('canvas');
+  private masked = document.createElement('canvas');
+  private garment = document.createElement('canvas');
+  private stream: MediaStream | null = null;
+  private disposed = false; private cameraGeneration = 0; private imageGeneration = 0;
+  private raf = 0; private poseTimer = 0; private detector: any = null; private poseBusy = false;
+  private offset = {x:0,y:0}; private anchor: {x:number;y:number;width:number}|null = null;
+  private dragOrigin: {x:number;y:number;ox:number;oy:number}|null = null;
+  private editOrigin: {x:number;y:number}|null = null;
+  private editPrevious: {x:number;y:number}|null = null;
+  private editRect = {x:0,y:0,width:480,height:480};
+  private lastFrame = 0;
+  private imageRevision = 0;
+  private renderedState = '';
+  constructor(private api: ApiService, private route: ActivatedRoute, private zone: NgZone) {}
 
   ngOnInit(): void {
-    const st = history.state as { product?: Product } | null;
-    if (st?.product?.id) {
-      this.product = st.product;
-      this.startCam();
-    }
-  }
-
-  // ----------------------------------------------------------------
-  // Cámara / silueta demo
-  // ----------------------------------------------------------------
-  startCam(): void {
-    if (this.streaming || this.starting) return;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      this.camError = 'Tu navegador no permite acceder a la cámara en este contexto.';
-      return;
-    }
-    this.starting = true;
-    this.loadingCam = true;
-    this.camError = '';
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false })
-      .then((stream) => {
-        this.stopDetector();
-        this.stream = stream;
-        this.mode = 'camera';
-        const v = this.video?.nativeElement;
-        if (v) {
-          v.srcObject = stream;
-          v.play().catch(() => {});
-        }
-        this.ngZone.run(() => {
-          this.streaming = true;
-          this.loadingCam = false;
-          this.starting = false;
-          this.camError = '';
-          this.spinDetector();
-        });
-      })
-      .catch((err: unknown) => {
-        const name = (err as { name?: string })?.name;
-        this.camError =
-          name === 'NotAllowedError' || name === 'PermissionDeniedError'
-            ? 'No diste permiso a la cámara. Puedes usar la silueta demo o reintentar.'
-            : 'No pudimos acceder a la cámara aquí. Usa la silueta demo sin problema.';
-        this.ngZone.run(() => {
-          this.loadingCam = false;
-          this.starting = false;
-        });
-      });
-  }
-
-  useDemo(): void {
-    this.stopCam();
-    this.stopDetector();
-    this.mode = 'demo';
-    this.streaming = false;
-    this.camError = '';
-    this.resetAnchor();
-  }
-
-  /** Reinicia el auto-ancla a una pose neutra (se usa al (re)iniciar la camara). */
-  private resetAnchor(): void {
-    this.anchorUpdate = { x: 0, y: 35, fit: 1 };
-  }
-
-  // ----------------------------------------------------------------
-  // Pose detection (lazy, con degradación a manual)
-  // ----------------------------------------------------------------
-  toggleAutoFit(): void {
-    if (this.autoFit) {
-      this.spinDetector();
-    } else {
-      this.stopDetector();
-    }
-  }
-
-  private spinDetector(): void {
-    if (!this.autoFit || this.mode !== 'camera') return;
-    if (this.poseReady) {
-      this.poseLoading = false;
-      this.runPose();
-      return;
-    }
-    if (this.poseError) return;
-    if (this.poseLoading) return;
-    this.poseLoading = true;
-    this.ngZone.runOutsideAngular(() => {
-      this.loadPose().then(() => {
-        this.ngZone.run(() => {
-          this.poseLoading = false;
-          if (this.autoFit && this.mode === 'camera' && this.streaming) {
-            this.poseReady = true;
-            this.runPose();
-          }
-        });
-      }).catch((err) => {
-        this.ngZone.run(() => {
-          this.poseLoading = false;
-          this.autoFit = false;
-          this.poseError = 'No se pudo activar la detección de pose (requiere internet). Mantienes el ajuste manual.';
-          console.warn('pose:', err);
-        });
-      });
+    const product = history.state?.product as Product | undefined;
+    const id = Number(this.route.snapshot.queryParamMap.get('producto'));
+    if (product && (!id || product.id === id)) this.selectProduct(product);
+    else if (Number.isInteger(id) && id > 0) this.api.getProduct(id).subscribe({
+      next: p => { if (!this.disposed) this.selectProduct(p); }, error: () => { this.imageMessage = 'No se pudo cargar la prenda. Vuelve al catálogo o carga una imagen.'; }
     });
   }
-
-  private loadPose(): Promise<void> {
-    const anyWin = window as any;
-    if (anyWin.Pose) return Promise.resolve();
-    return new Promise<void>((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = POSE_CDN;
-      script.async = true;
-      script.onload = () => (anyWin.Pose ? resolve() : reject(new Error('Pose undefined')));
-      script.onerror = () => reject(new Error('No se pudo descargar' + POSE_CDN));
-      document.head.appendChild(script);
-    });
+  ngAfterViewInit(): void {
+    this.zone.runOutsideAngular(() => { const loop = (time: number) => {
+      if (this.disposed) return;
+      if (time - this.lastFrame > 32) { this.render(); this.lastFrame = time; }
+      this.raf = requestAnimationFrame(loop);
+    }; this.raf = requestAnimationFrame(loop); });
   }
-
-  private runPose(): void {
-    if (!this.detector && this.poseReady && (window as any).Pose) {
-      const win = window as any;
-      this.detector = new win.Pose({
-        locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`,
-      });
-      this.detector.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        enableSegmentation: false,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
-      this.detector.onResults((res: any) => this.onResults(res));
-      this.detector.initialize().then(() => this.loopPose());
-      return;
-    }
-    this.loopPose();
-  }
-
-  private loopPose(): void {
-    if (!this.autoFit || this.mode !== 'camera' || this.dragging || !this.detector) {
-      this.stopDetectorLoop();
-      return;
-    }
-    const v = this.video?.nativeElement;
-    if (this.streaming && this.detector && v && v.readyState >= 2) {
-      try {
-        this.detector.send({ image: v });
-      } catch { /* ignorado */ }
-    }
-    this.rafId = requestAnimationFrame(() => this.loopPose());
-  }
-
-  private onResults(res: any): void {
-    const lm = res?.poseLandmarks;
-    if (!lm || lm.length < 20) return;
-    const left = lm[11];
-    const right = lm[12];
-    if (!left || !right) return;
-    const stage = this.stage?.nativeElement;
-    const w = stage?.clientWidth ?? 500;
-    const h = stage?.clientHeight ?? 625;
-    // El video se renderiza espejado: la coordenada X de MediaPipe va invertida.
-    const cx = (1 - (left.x + right.x) / 2) * w;
-    const cy = (left.y + right.y) / 2 * h;
-    const shoulderW = Math.max(180, Math.abs(left.x - right.x) * w);
-    // Escala exacta: la separacion de hombros de la silueta debe coincidir con la
-    // detectada, en lugar de dividir por un valor aproximado.
-    const fit = Math.min(3, Math.max(0.2, shoulderW / GARMENT_SHOULDER_SPAN));
-    const anchorDx = cx - w / 2;
-    // Alineamos el punto de cuello de la prenda (105, GARMENT_NECK_Y) con el punto
-    // medio de los hombros detectado. El centro del marco esta a GARMENT_BOX.h/2 del
-    // borde superior, por eso el compensado vertical es (h/2 - neckY) * fit.
-    const neckToCenter = (GARMENT_BOX.h / 2 - GARMENT_NECK_Y) * fit;
-    const anchorDy = cy + neckToCenter - h / 2;
-    this.ngZone.run(() => {
-      this.anchorUpdate = {
-        x: anchorDx,
-        y: Math.max(-h, Math.min(h, anchorDy)),
-        fit,
-      };
-    });
-  }
-
-  private stopDetectorLoop(): void {
-    if (this.rafId != null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-  }
-
-  private stopDetector(): void {
-    this.stopDetectorLoop();
-    if (this.detector) {
-      try { this.detector.close?.(); } catch { /* ignorado */ }
-      this.detector = null;
-    }
-    if (this.poseReady) {
-      this.poseReady = false;
-      this.poseError = '';
-    }
-    this.anchorUpdate = null;
-  }
-
-  // ----------------------------------------------------------------
-  // Drag con mouse sobre el lienzo
-  // ----------------------------------------------------------------
-  dragStart(e: PointerEvent): void {
-    if (this.mode !== 'camera' && this.mode !== 'demo') return;
-    this.dragging = true;
-    this.dragStartX = e.clientX;
-    this.dragStartY = e.clientY;
-    this.dragOffsetX = this.offsetX;
-    this.dragOffsetY = this.offsetY;
-  }
-
-  dragMove(e: PointerEvent): void {
-    if (!this.dragging) return;
-    e.preventDefault();
-    const dx = e.clientX - this.dragStartX;
-    const dy = e.clientY - this.dragStartY;
-    // Si hay auto-ancla activo, el arrastre refina la posición; si no, mueve el overlay directamente.
-    this.offsetX = this.dragOffsetX + dx;
-    this.offsetY = this.dragOffsetY + dy;
-  }
-
-  dragEnd(): void {
-    this.dragging = false;
-  }
-
-  // ----------------------------------------------------------------
-  // Talla, tinte, filtros
-  // ----------------------------------------------------------------
-  applySize(p: { name: string; scale: number }): void {
-    this.selectedSize = p.name;
-    this.scale = p.scale;
-  }
-
-  applyTint(c: Tien): void {
-    this.activeTint = c;
-  }
-
-  // ----------------------------------------------------------------
-  // Captura de foto
-  // ----------------------------------------------------------------
-  capture(): void {
-    if (this.capturing) return;
-    this.capturing = true;
-    const stage = this.stage?.nativeElement;
-    if (!stage) {
-      this.capturing = false;
-      return;
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = stage.clientWidth;
-    canvas.height = stage.clientHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      this.capturing = false;
-      return;
-    }
-
-    if (this.mode === 'camera' && this.video?.nativeElement) {
-      ctx.save();
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(this.video.nativeElement, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#141a21';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#5b6674';
-      ctx.beginPath();
-      ctx.ellipse(canvas.width / 2, canvas.height * 0.2, 46, 56, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(canvas.width / 2 - 4, canvas.height * 0.42);
-      ctx.lineTo(canvas.width / 2 - 34, canvas.height * 0.58);
-      ctx.lineTo(canvas.width / 2 + 34, canvas.height * 0.58);
-      ctx.lineTo(canvas.width / 2 + 4, canvas.height * 0.42);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      this.paintOverlay(ctx, canvas, img);
-      this.snapshot(canvas);
-    };
-    img.onerror = () => {
-      // Sin red para la imagen remota: capturamos la escena igualmente con la silueta.
-      this.snapshot(canvas);
-    };
-    img.src = this.product?.image_url || this.fallbackImg;
-  }
-
-  private paintOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, img: HTMLImageElement): void {
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(((this.rotation || 0) * Math.PI) / 180);
-    const s = ((this.scale || 100) / 100) * this.fitFactor;
-    ctx.scale(s, s);
-    if (this.flip) ctx.scale(-1, 1);
-    const dx = (this.offsetX || 0) + (this.autoFit && this.anchorUpdate ? this.anchorUpdate.x : 0);
-    const dy = (this.offsetY || 0) + (this.autoFit && this.anchorUpdate ? this.anchorUpdate.y : 0);
-    ctx.translate(dx, dy);
-    ctx.globalAlpha = this.opacityPct;
-    // Mismo recorte que en pantalla: silueta GARMENT_PATH + object-fit: cover.
-    const bw = GARMENT_BOX.w;
-    const bh = GARMENT_BOX.h;
-    // Pasamos el contexto al espacio de coordenadas de la caja (origen = esquina
-    // superior izquierda de la silueta) para poder recortar con Path2D.
-    ctx.translate(-bw / 2, -bh / 2);
-    this.traceGarment(ctx);
-    const srcW = Math.max(1, img.naturalWidth || img.width);
-    const srcH = Math.max(1, img.naturalHeight || img.height);
-    // `cover`: escala la foto para llenar la caja y recorta el sobrante.
-    const scale = Math.max(bw / srcW, bh / srcH);
-    const dw = srcW * scale;
-    const dh = srcH * scale;
-    // object-position: (%) posiciona el punto de corte dentro del excedente.
-    const slackX = Math.max(0, dw - bw);
-    const slackY = Math.max(0, dh - bh);
-    const imgDx = slackX * (this.cropX / 100);
-    const imgDy = slackY * (this.cropY / 100);
-    ctx.drawImage(img, imgDx, imgDy, dw, dh);
-    const tint = this.tintColor;
-    if (tint) {
-      ctx.globalCompositeOperation = 'color';
-      ctx.globalAlpha = this.opacityPct * 0.6;
-      ctx.fillStyle = tint;
-      ctx.fillRect(0, 0, bw, bh);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-    ctx.restore();
-  }
-
-  resetCrop(): void {
-    this.cropX = 50;
-    this.cropY = 30;
-  }
-
-  /**
-   * Recorta el lienzo con la silueta de la prenda. Usa la MISMA constante
-   * (GARMENT_PATH) que el `clip-path` del CSS, de modo que la foto descargada
-   * queda recortada exactamente como se ve en pantalla. El contexto debe estar
-   * mapeado al espacio de GARMENT_BOX (ver paintOverlay).
-   */
-  private traceGarment(ctx: CanvasRenderingContext2D): void {
-    ctx.beginPath();
-    ctx.clip(new Path2D(GARMENT_PATH));
-  }
-
-  private snapshot(canvas: HTMLCanvasElement): void {
-    try {
-      const url = canvas.toDataURL('image/png');
-      this.ngZone.run(() => {
-        this.shotUrl = url;
-        this.capturing = false;
-      });
-    } catch (e) {
-      this.ngZone.run(() => {
-        this.capturing = false;
-      });
-      console.warn('captura:', e);
-    }
-  }
-
-  // ----------------------------------------------------------------
-  // Navegación / ciclo de vida
-  // ----------------------------------------------------------------
-  goCatalog(): void {
-    this.stopCam();
-    this.router.navigate(['/']);
-  }
-
-  keepShopping(): void {
-    if (!this.product) return;
-    const id = this.product.id;
-    this.stopCam();
-    this.router.navigate(['/'], { state: { openProductId: id } });
-  }
-
-  onImgError(event: Event): void {
-    (event.target as HTMLImageElement).src = this.fallbackImg;
-  }
-
-  stopCam(): void {
-    this.stopDetectorLoop();
-    if (this.stream) {
-      this.stream.getTracks().forEach((t) => t.stop());
-      this.stream = null;
-    }
-    this.streaming = false;
-  }
-
   ngOnDestroy(): void {
-    this.stopCam();
-    this.stopDetectorLoop();
+    this.disposed = true; this.imageGeneration++; this.useDemo(); cancelAnimationFrame(this.raf);
+    const detector = this.detector; this.detector = null;
+    if (detector) void Promise.resolve(detector.close()).catch(() => {});
+  }
+  private selectProduct(product: Product): void {
+    this.product = product;
+    const name = (product.category?.name ?? product.name).toLowerCase();
+    this.kind = /pantal|falda|short|jean/.test(name) ? 'bottom' : /vestido|enterizo/.test(name) ? 'dress' : 'top';
+    if (product.image_url) void this.loadImage(product.image_url);
+  }
+  upload(event: Event): void {
+    const input = event.target as HTMLInputElement; const file = input.files?.[0];
+    if (!file) return;
+    if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { this.imageMessage = 'Usa una imagen PNG, JPEG o WebP de hasta 10 MB.'; input.value = ''; return; }
+    const url = URL.createObjectURL(file);
+    void this.loadImage(url).finally(() => URL.revokeObjectURL(url)); input.value = '';
+  }
+  private async loadImage(url: string): Promise<void> {
+    const generation = ++this.imageGeneration; this.processing = true; this.imageMessage = '';
+    try {
+      const image = new Image(); image.crossOrigin = 'anonymous'; image.src = url;
+      await image.decode();
+      if (this.disposed || generation !== this.imageGeneration) return;
+      const scale = Math.min(1, 800 / Math.max(image.width, image.height));
+      const work = document.createElement('canvas'); work.width = Math.max(1, Math.round(image.width * scale)); work.height = Math.max(1, Math.round(image.height * scale));
+      const ctx = work.getContext('2d', {willReadFrequently:true})!; ctx.drawImage(image, 0, 0, work.width, work.height);
+      ctx.getImageData(0, 0, work.width, work.height);
+      this.source = work; this.masked.width = work.width; this.masked.height = work.height;
+      this.masked.getContext('2d')!.drawImage(work, 0, 0); this.undoStack = [];
+      this.garmentReady = true; this.removeBackground(false); this.resetPosition();
+    } catch {
+      if (!this.disposed && generation === this.imageGeneration) this.imageMessage = 'No se pudo preparar esa imagen. Si el servidor de imágenes impide el acceso, descarga la foto y cárgala desde tu dispositivo.';
+    } finally { if (!this.disposed && generation === this.imageGeneration) this.processing = false; }
+  }
+  private saveUndo(): void {
+    this.undoStack = [...this.undoStack.slice(-4), this.masked.getContext('2d')!.getImageData(0, 0, this.masked.width, this.masked.height)];
+  }
+  removeBackground(save = true): void {
+    if (!this.garmentReady) return;
+    if (save) this.saveUndo();
+    const data = this.source.getContext('2d')!.getImageData(0, 0, this.source.width, this.source.height);
+    data.data.set(removeEdgeBackground(data.data, data.width, data.height, Number(this.tolerance)));
+    this.masked.getContext('2d')!.putImageData(data, 0, 0); this.updateGarment();
+  }
+  restoreOriginal(): void { if (this.garmentReady) { this.saveUndo(); const ctx = this.masked.getContext('2d')!; ctx.clearRect(0,0,this.masked.width,this.masked.height); ctx.drawImage(this.source,0,0); this.updateGarment(); } }
+  undo(): void { const last = this.undoStack.pop(); if (last) { this.masked.getContext('2d')!.putImageData(last,0,0); this.updateGarment(); } }
+  private updateGarment(): void {
+    this.imageRevision++;
+    const data = this.masked.getContext('2d')!.getImageData(0,0,this.masked.width,this.masked.height);
+    const bounds = alphaBounds(data.data, data.width, data.height);
+    this.garment.width = bounds?.width ?? 1; this.garment.height = bounds?.height ?? 1;
+    if (bounds) this.garment.getContext('2d')!.drawImage(this.masked,bounds.x,bounds.y,bounds.width,bounds.height,0,0,bounds.width,bounds.height);
+    this.drawEditor();
+  }
+  private drawEditor(crop?: {x:number;y:number}): void {
+    if (!this.editor) return;
+    const c = this.editor.nativeElement, ctx = c.getContext('2d')!;
+    ctx.clearRect(0,0,c.width,c.height);
+    const scale = Math.min(460 / this.masked.width,460 / this.masked.height);
+    this.editRect = {x:(480-this.masked.width*scale)/2,y:(480-this.masked.height*scale)/2,width:this.masked.width*scale,height:this.masked.height*scale};
+    const r = this.editRect; ctx.drawImage(this.masked,r.x,r.y,r.width,r.height);
+    if (crop && this.editOrigin) { ctx.strokeStyle='#0284c7'; ctx.lineWidth=2;ctx.setLineDash([7,4]);ctx.strokeRect(this.editOrigin.x,this.editOrigin.y,crop.x-this.editOrigin.x,crop.y-this.editOrigin.y);ctx.setLineDash([]); }
+  }
+  private point(event: PointerEvent, canvas: HTMLCanvasElement): {x:number;y:number} {
+    const rect = canvas.getBoundingClientRect();
+    const factor = Math.min(rect.width/canvas.width,rect.height/canvas.height);
+    return {x:(event.clientX-rect.left-(rect.width-canvas.width*factor)/2)/factor,y:(event.clientY-rect.top-(rect.height-canvas.height*factor)/2)/factor};
+  }
+  editStart(event: PointerEvent): void {
+    if (!this.garmentReady || this.processing) return;
+    event.preventDefault(); this.editor.nativeElement.setPointerCapture(event.pointerId);
+    this.saveUndo(); this.editOrigin = this.point(event,this.editor.nativeElement); this.editPrevious = null;
+    if (this.editTool !== 'crop') this.paint(this.editOrigin);
+  }
+  editMove(event: PointerEvent): void {
+    if (!this.editOrigin) return;
+    const p = this.point(event,this.editor.nativeElement);
+    if (this.editTool === 'crop') this.drawEditor(p); else this.paint(p);
+  }
+  editEnd(event: PointerEvent): void {
+    if (!this.editOrigin) return;
+    if (this.editTool === 'crop') {
+      const p = this.point(event,this.editor.nativeElement), r = this.editRect;
+      const x = Math.max(0,(Math.min(p.x,this.editOrigin.x)-r.x)*this.masked.width/r.width);
+      const y = Math.max(0,(Math.min(p.y,this.editOrigin.y)-r.y)*this.masked.height/r.height);
+      const right = Math.min(this.masked.width,(Math.max(p.x,this.editOrigin.x)-r.x)*this.masked.width/r.width);
+      const bottom = Math.min(this.masked.height,(Math.max(p.y,this.editOrigin.y)-r.y)*this.masked.height/r.height);
+      if (right-x > 5 && bottom-y > 5) {
+        const ctx = this.masked.getContext('2d')!;
+        ctx.clearRect(0,0,this.masked.width,y); ctx.clearRect(0,bottom,this.masked.width,this.masked.height-bottom);
+        ctx.clearRect(0,0,x,this.masked.height); ctx.clearRect(right,0,this.masked.width-right,this.masked.height);
+      }
+    }
+    this.editOrigin = null; this.editPrevious = null; this.updateGarment();
+  }
+  cancelEdit(): void { this.editOrigin=null;this.editPrevious=null;this.updateGarment(); }
+  private paint(point: {x:number;y:number}): void {
+    const r = this.editRect, factor = this.masked.width/r.width;
+    const p = {x:(point.x-r.x)*factor,y:(point.y-r.y)*factor};
+    const last = this.editPrevious ?? p;
+    const radius = Number(this.brush)*factor/2;
+    const count = Math.max(1,Math.ceil(Math.hypot(p.x-last.x,p.y-last.y)/Math.max(1,radius/2)));
+    const ctx = this.masked.getContext('2d')!;
+    for (let step=0;step<=count;step++) {
+      ctx.save();ctx.beginPath();ctx.arc(last.x+(p.x-last.x)*step/count,last.y+(p.y-last.y)*step/count,radius,0,Math.PI*2);
+      if (this.editTool === 'erase') { ctx.globalCompositeOperation='destination-out';ctx.fill(); }
+      else { ctx.clip();ctx.drawImage(this.source,0,0); }
+      ctx.restore();
+    }
+    this.editPrevious = p; this.updateGarment();
+  }
+  startDrag(event: PointerEvent): void {
+    if (!this.garmentReady) return;
+    event.preventDefault();this.stage.nativeElement.setPointerCapture(event.pointerId);
+    const p=this.point(event,this.stage.nativeElement);this.dragOrigin={...p,ox:this.offset.x,oy:this.offset.y};
+  }
+  drag(event: PointerEvent): void {
+    if (!this.dragOrigin) return;
+    const p=this.point(event,this.stage.nativeElement), d=this.dragOrigin;
+    this.offset={x:Math.max(-500,Math.min(500,d.ox+p.x-d.x)),y:Math.max(-650,Math.min(650,d.oy+p.y-d.y))};
+  }
+  stopDrag(): void { this.dragOrigin=null; }
+  resetPosition(): void { this.scale=100;this.rotation=0;this.opacity=95;this.offset={x:0,y:0};this.anchor=null;this.mirrorGarment=false; }
+  async startCamera(): Promise<void> {
+    if (this.starting || this.streaming) return;
+    const generation=++this.cameraGeneration;this.starting=true;this.cameraMessage='';
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('unavailable');
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:960}},audio:false});
+      if (this.disposed || generation!==this.cameraGeneration) {stream.getTracks().forEach(t=>t.stop());return;}
+      this.stream=stream;this.video.nativeElement.srcObject=stream;await this.video.nativeElement.play();
+      if (this.disposed || generation!==this.cameraGeneration) {stream.getTracks().forEach(t=>t.stop());return;}
+      this.streaming=true;this.resetPosition();
+    } catch (error) {
+      if (!this.disposed && generation===this.cameraGeneration) {this.useDemo();this.cameraMessage=(error as DOMException)?.name==='NotAllowedError'?'Permite el acceso a la cámara para usarla. Puedes continuar con el maniquí.':'No se pudo abrir la cámara. Usa localhost o HTTPS y comprueba que esté disponible.';}
+    } finally {if (generation===this.cameraGeneration) this.starting=false;}
+  }
+  useDemo(): void {
+    this.cameraGeneration++;this.starting=false;this.streaming=false;this.autoFit=false;this.anchor=null;
+    clearTimeout(this.poseTimer);this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;
+    if(this.video) {this.video.nativeElement.pause();this.video.nativeElement.srcObject=null;}
+  }
+  async toggleTracking(): Promise<void> {
+    clearTimeout(this.poseTimer);
+    if (!this.autoFit || !this.streaming) {this.anchor=null;return;}
+    try {
+      if (!(window as any).Pose) await new Promise<void>((resolve,reject)=>{
+        const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';script.async=true;
+        script.onload=()=>resolve();script.onerror=()=>reject(new Error('pose'));document.head.appendChild(script);
+      });
+      if(this.disposed || !this.streaming || !this.autoFit) return;
+      if(!this.detector) {
+        this.detector=new (window as any).Pose({locateFile:(file:string)=>'https://cdn.jsdelivr.net/npm/@mediapipe/pose/'+file});
+        this.detector.setOptions({modelComplexity:0,smoothLandmarks:true,enableSegmentation:false,minDetectionConfidence:.6,minTrackingConfidence:.6});
+        this.detector.onResults((result:any)=>this.onPose(result));await this.detector.initialize();
+      }
+      await this.track();
+    } catch { if (!this.disposed) {this.autoFit=false;this.anchor=null;this.cameraMessage='El seguimiento no está disponible. Puedes ajustar la prenda arrastrando y usando los controles.';} }
+  }
+  private async track(): Promise<void> {
+    if(this.disposed || !this.autoFit || !this.streaming || this.poseBusy || !this.detector) return;
+    this.poseBusy=true;
+    try {if(this.video.nativeElement.readyState>=2) await this.detector.send({image:this.video.nativeElement});}
+    catch {this.zone.run(()=>{this.autoFit=false;this.anchor=null;this.cameraMessage='El seguimiento se interrumpió. Puedes continuar con el ajuste manual.';});}
+    finally {this.poseBusy=false; if(!this.disposed && this.autoFit && this.streaming) this.zone.runOutsideAngular(()=>{this.poseTimer=window.setTimeout(()=>void this.track(),100);});}
+  }
+  private onPose(result:any): void {
+    const landmarks=result?.poseLandmarks;
+    if(!this.autoFit || !this.streaming || !landmarks) {this.anchor=null;return;}
+    const left=landmarks[this.kind==='bottom'?23:11],right=landmarks[this.kind==='bottom'?24:12];
+    if(!left || !right || (left.visibility??0)<.6 || (right.visibility??0)<.6) {this.anchor=null;return;}
+    const video=this.video.nativeElement;const g=coverGeometry(video.videoWidth,video.videoHeight,640,800);
+    const x=640-(((left.x+right.x)/2)*video.videoWidth*g.scale+g.x);
+    const shoulderY=((left.y+right.y)/2)*video.videoHeight*g.scale+g.y;
+    const width=Math.max(70,Math.min(600,Math.abs(left.x-right.x)*video.videoWidth*g.scale*(this.kind==='bottom'?1.3:1.65)));
+    const y=shoulderY+(this.garment.height/Math.max(1,this.garment.width))*width*.42;
+    const previous=this.anchor;
+    this.anchor=previous?{x:previous.x*.75+x*.25,y:previous.y*.75+y*.25,width:previous.width*.75+width*.25}:{x,y,width};
+  }
+  private render(): void {
+    const canvas=this.stage?.nativeElement;if(!canvas) return;
+    const state=JSON.stringify([this.imageRevision,this.garmentReady,this.kind,this.scale,this.rotation,this.opacity,this.mirrorGarment,this.offset,this.anchor,this.streaming]);
+    if (!this.streaming && state===this.renderedState) return;
+    this.renderedState=state;
+    const ctx=canvas.getContext('2d')!;ctx.clearRect(0,0,640,800);
+    const gradient=ctx.createLinearGradient(0,0,0,800);gradient.addColorStop(0,'#eef3f8');gradient.addColorStop(1,'#dfe7ed');ctx.fillStyle=gradient;ctx.fillRect(0,0,640,800);
+    const video=this.video?.nativeElement;
+    if(this.streaming && video?.readyState>=2 && video.videoWidth) {
+      const g=coverGeometry(video.videoWidth,video.videoHeight,640,800);ctx.save();ctx.translate(640,0);ctx.scale(-1,1);ctx.drawImage(video,g.x,g.y,video.videoWidth*g.scale,video.videoHeight*g.scale);ctx.restore();
+    } else this.drawMannequin(ctx);
+    if(!this.garmentReady) return;
+    const width=(this.anchor?.width??(this.kind==='bottom'?190:300))*Number(this.scale)/100;
+    const height=width*this.garment.height/Math.max(1,this.garment.width);
+    const center=this.anchor??{x:320,y:this.kind==='bottom'?570:this.kind==='dress'?440:335};
+    ctx.save();ctx.translate(center.x+this.offset.x,center.y+this.offset.y);ctx.rotate(Number(this.rotation)*Math.PI/180);ctx.scale(this.mirrorGarment?-1:1,1);ctx.globalAlpha=Number(this.opacity)/100;
+    ctx.drawImage(this.garment,-width/2,-height/2,width,height);ctx.restore();
+  }
+  private drawMannequin(ctx:CanvasRenderingContext2D): void {
+    ctx.fillStyle='#bfcdd6';ctx.strokeStyle='#a4b6c3';ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(320,118,43,55,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    const body=new Path2D('M300 168 L300 190 Q253 194 225 217 L179 385 Q174 404 190 410 Q205 414 212 394 L253 282 L267 409 L250 697 Q249 721 270 724 Q289 726 293 704 L320 482 L347 704 Q351 726 370 724 Q391 721 390 697 L373 409 L387 282 L428 394 Q435 414 450 410 Q466 404 461 385 L415 217 Q387 194 340 190 L340 168 Z');ctx.fill(body);ctx.stroke(body);
+    ctx.setLineDash([5,7]);ctx.strokeStyle='#c7d3dc';ctx.beginPath();ctx.moveTo(110,214);ctx.lineTo(530,214);ctx.moveTo(110,427);ctx.lineTo(530,427);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#71869a';ctx.font='13px sans-serif';ctx.textAlign='center';ctx.fillText('Referencia visual · ajusta según tu prenda',320,770);
+  }
+  capture(): void {
+    if(!this.garmentReady || this.processing) return;
+    this.render();this.stage.nativeElement.toBlob(blob=>{if(!blob) return;const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='fashionstore-vestidor.png';link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);},'image/png');
   }
 }

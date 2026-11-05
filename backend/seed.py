@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import bcrypt
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.core.database import Base, SessionLocal, engine
 from app.models.branch import Branch
@@ -22,6 +22,8 @@ from app.models.catalog import (
 )
 from app.models.inventory import Inventory, InventoryMovement
 from app.models.user import Role, User
+from app.models.tenant import Empresa, Plan, Suscripcion
+from sqlalchemy import or_
 
 
 def _hash(pw: str) -> str:
@@ -29,24 +31,45 @@ def _hash(pw: str) -> str:
 
 
 def _first_or_create(db, model, **kwargs):
-    obj = db.query(model).filter_by(**kwargs).first()
+    query = db.query(model).filter_by(**kwargs)
+    if model in (Category, Provider, Branch):
+        query = query.filter(or_(model.empresa_id == db.info['seed_empresa'], model.empresa_id.is_(None))).order_by(model.empresa_id.desc())
+    if model is Role:
+        query = query.filter(Role.empresa_id.is_(None))
+    obj = query.first()
     if obj is None:
         obj = model(**kwargs)
         db.add(obj)
+    if model in (Category, Provider, Branch):
+        obj.empresa_id = db.info['seed_empresa']
     return obj
 
 
 def seed_db():
     print("Conectando a la base de datos...")
     Base.metadata.create_all(bind=engine)
+    from app.core.migrations import migrate_compatible_schema
+    migrate_compatible_schema(engine)
     db = SessionLocal()
 
     try:
+        company = db.query(Empresa).filter_by(nit='DEMO-FASHIONSTORE-001').first()
+        if company is None:
+            company = Empresa(razon_social='FashionStore Demo', nit='DEMO-FASHIONSTORE-001')
+            db.add(company); db.flush()
+        db.info['seed_empresa'] = company.id
+        plan = db.query(Plan).filter(Plan.permite_reportes_ia.is_(True), Plan.is_active.is_(True), Plan.max_sucursales >= 5).first()
+        if plan is None:
+            plan = Plan(nombre='Profesional', max_sucursales=10, permite_reportes_ia=True, permite_analitica_ml=True)
+            db.add(plan); db.flush()
+        if not db.query(Suscripcion).filter_by(empresa_id=company.id).first():
+            db.add(Suscripcion(empresa_id=company.id, plan_id=plan.id, fecha_inicio=date.today(), fecha_vencimiento=date.today()+timedelta(days=30), estado='ACTIVA'))
         # ------------------------------------------------------------------
         # Roles
         # ------------------------------------------------------------------
         roles = {
-            "Administrador": "Control total de la plataforma",
+            "Administrador de Plataforma": "Gestiona empresas, planes y suscripciones SaaS",
+            "Administrador": "Control total de la empresa contratante",
             "Cliente": "Usuario regular de la tienda",
             "Cajero": "Gestión de ventas en sucursal",
             "Encargado de Sucursal": "Administración de una sucursal",
@@ -57,12 +80,14 @@ def seed_db():
         db.commit()
         print("Roles listos.")
 
-        role = {r.name: r.id for r in db.query(Role).all()}
+        role = {r.name: r.id for r in db.query(Role).filter(Role.empresa_id.is_(None)).all()}
 
         # ------------------------------------------------------------------
         # Usuarios (uno por rol + clientes de prueba)
         # ------------------------------------------------------------------
         users = [
+            dict(first_name="Plataforma", last_name="SaaS", email="plataforma@fashionstore.com",
+                 password="plataforma123", role="Administrador de Plataforma", phone="+591 700 000 000"),
             dict(first_name="Admin", last_name="Principal", email="admin@fashionstore.com",
                  password="admin123", role="Administrador", phone="+591 700 000 001"),
             dict(first_name="María", last_name="Gonzales", email="cliente@fashionstore.com",
@@ -78,6 +103,7 @@ def seed_db():
         ]
         for u in users:
             user = _first_or_create(db, User, email=u["email"])
+            user.empresa_id = None if u["role"] == "Administrador de Plataforma" else company.id
             user.first_name = u["first_name"]
             user.last_name = u["last_name"]
             user.phone = u["phone"]
@@ -141,7 +167,7 @@ def seed_db():
         # Vinculación portal proveedor (proveedor@fashionstore.com -> Moda Latina)
         # ------------------------------------------------------------------
         prov_user = db.query(User).filter(User.email == "proveedor@fashionstore.com").first()
-        moda = db.query(Provider).filter(Provider.name == "Moda Latina").first()
+        moda = db.query(Provider).filter(Provider.empresa_id == company.id, Provider.name == "Moda Latina").first()
         if prov_user and moda:
             existing_account = db.query(ProviderAccount).filter_by(user_id=prov_user.id).first()
             if existing_account is None:
@@ -161,10 +187,10 @@ def seed_db():
         # Productos
         # ------------------------------------------------------------------
         def cat(name: str) -> Category:
-            return db.query(Category).filter(Category.name == name).first()
+            return db.query(Category).filter(Category.empresa_id == company.id, Category.name == name).first()
 
         def prov(name: str) -> Provider:
-            return db.query(Provider).filter(Provider.name == name).first()
+            return db.query(Provider).filter(Provider.empresa_id == company.id, Provider.name == name).first()
 
         def get_season(name: str) -> Season:
             return db.query(Season).filter(Season.name == name).first()
@@ -270,10 +296,11 @@ def seed_db():
         ]
 
         for p in products_data:
-            existing = db.query(Product).filter(Product.name == p["name"]).first()
+            existing = db.query(Product).filter(Product.name == p["name"], or_(Product.empresa_id == company.id, Product.empresa_id.is_(None))).first()
             if existing:
+                existing.empresa_id = company.id
                 continue
-            db.add(Product(**p))
+            db.add(Product(**p, empresa_id=company.id))
 
         db.commit()
         print("Productos listos.")
@@ -305,7 +332,7 @@ def seed_db():
 
         sku_counter = 0
         for product_name, combos in variant_specs.items():
-            product = db.query(Product).filter(Product.name == product_name).first()
+            product = db.query(Product).filter(Product.empresa_id == company.id, Product.name == product_name).first()
             if product is None or product.variants:
                 continue
             for size, color in combos:
@@ -314,7 +341,7 @@ def seed_db():
                     product_id=product.id,
                     size_id=get_size(size).id,
                     color_id=get_color(color).id,
-                    sku=f"FS-{sku_counter:05d}",
+                    sku=f"FS-{product.id}-{sku_counter:05d}",
                 ))
         db.commit()
         print("Variantes listas.")
@@ -349,8 +376,8 @@ def seed_db():
         # Inventario por sucursal (CU11/CU21) con el movimiento INGRESO inicial
         # ------------------------------------------------------------------
         admin_user = db.query(User).filter(User.email == "admin@fashionstore.com").first()
-        branches = db.query(Branch).all()
-        variants = db.query(ProductVariant).order_by(ProductVariant.id).all()
+        branches = db.query(Branch).filter(Branch.empresa_id == company.id).all()
+        variants = db.query(ProductVariant).join(Product).filter(Product.empresa_id == company.id).order_by(ProductVariant.id).all()
 
         # Distribución base: cada variante disponible en 2-3 sucursales con cantidades variadas
         import random
@@ -387,6 +414,8 @@ def seed_db():
                 inventory_created += 1
         db.commit()
         print(f"Inventario listo: {inventory_created} registros con ingreso inicial.")
+        _seed_second_company(db, role, plan)
+        db.commit()
 
     except Exception as e:
         print(f"Error durante el seed: {e}")
@@ -395,6 +424,32 @@ def seed_db():
     finally:
         db.close()
         print("Seed completado correctamente.")
+
+
+def _seed_second_company(db, roles, plan):
+    company = db.query(Empresa).filter_by(nit='DEMO-MODAURBANA-002').first()
+    if company is None:
+        company = Empresa(razon_social='Moda Urbana Demo', nit='DEMO-MODAURBANA-002')
+        db.add(company); db.flush()
+    if not db.query(Suscripcion).filter_by(empresa_id=company.id).first():
+        db.add(Suscripcion(empresa_id=company.id, plan_id=plan.id, fecha_inicio=date.today(), fecha_vencimiento=date.today()+timedelta(days=30), estado='ACTIVA'))
+    for label, role_name in [('admin', 'Administrador'), ('cliente', 'Cliente')]:
+        email = f'{label}@modaurbana.demo'
+        if not db.query(User).filter_by(email=email).first():
+            db.add(User(empresa_id=company.id, first_name=label.title(), last_name='Moda Urbana', email=email,
+                hashed_password=_hash(label+'123'), role_id=roles[role_name], is_active=True))
+    if db.query(Branch).filter_by(empresa_id=company.id).first():
+        return
+    branch = Branch(empresa_id=company.id, name='Moda Urbana Centro', city='Cochabamba', address='Av. Heroínas 100')
+    category = Category(empresa_id=company.id, name='Colección urbana')
+    db.add_all([branch, category]); db.flush()
+    product = Product(empresa_id=company.id, name='Polera Urbana Exclusiva', base_price=150, category_id=category.id)
+    db.add(product); db.flush()
+    variant = ProductVariant(product_id=product.id, size_id=db.query(Size).first().id, color_id=db.query(Color).first().id, sku=f'MU-{product.id}-M', price=150)
+    db.add(variant); db.flush()
+    inventory = Inventory(branch_id=branch.id, variant_id=variant.id, available=12)
+    db.add(inventory); db.flush()
+    db.add(InventoryMovement(inventory_id=inventory.id, movement_type='INGRESO', quantity=12, reason='Stock inicial de Moda Urbana'))
 
 
 if __name__ == "__main__":

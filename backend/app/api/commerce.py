@@ -1,4 +1,10 @@
 import secrets
+import json
+import hashlib
+from decimal import Decimal
+from app.core.money import money as _money
+from app.core.config import settings
+from app.models.sync import CambioPrenda
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -7,13 +13,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_business_user as get_current_user
+from app.core.tenant import ensure_tenant_owns, scope_to_empresa
 from app.models.branch import Branch
 from app.models.catalog import ProductVariant
 from app.models.commerce import CartItem, Notification, Order, OrderItem, Payment, Reservation, ReservationItem
 from app.models.inventory import Inventory, InventoryMovement
 from app.models.user import Role, User
 from app.schemas import (
+    ExchangeRequest,
+    ReservationCheckoutRequest,
     CartItemCreate,
     CartItemResponse,
     CartItemUpdate,
@@ -30,6 +39,9 @@ from app.schemas import (
     ReservationResponse,
 )
 from app.services.payments import get_gateway
+from app.services.refunds import order_financials, refund_all, create_refund, complete_refund, refund_response
+from app.models.commerce import Refund, RefundStockReturn
+from app.schemas import RefundCreate, RefundDecision, StockReturnInput
 from app.services.promotions import promotion_discount_for_variant
 
 router = APIRouter()
@@ -37,7 +49,7 @@ router = APIRouter()
 _STAFF_ROLES = {"Administrador", "Encargado de Sucursal", "Cajero"}
 
 _ALLOWED_ORDER_TRANSITIONS = {
-    "PENDIENTE": {"PAGADO", "CANCELADO"},
+    "PENDIENTE": {"CANCELADO"},
     "PAGADO": {"ENVIADO", "CANCELADO"},
     "ENVIADO": {"ENTREGADO", "CANCELADO"},
     "ENTREGADO": set(),
@@ -69,10 +81,11 @@ def _variant_info(variant: ProductVariant) -> dict:
     }
 
 
-def _get_variant_or_404(db: Session, variant_id: int) -> ProductVariant:
+def _get_variant_or_404(db: Session, variant_id: int, user: User) -> ProductVariant:
     variant = db.get(ProductVariant, variant_id)
     if variant is None or not variant.is_active or not variant.product.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+    ensure_tenant_owns(variant.product, user, label="Producto")
     return variant
 
 
@@ -82,7 +95,10 @@ def _get_inventory(db: Session, variant_id: int, branch_id: int, for_update: boo
         .filter(Inventory.variant_id == variant_id, Inventory.branch_id == branch_id)
     )
     if for_update:
-        query = query.with_for_update()
+        # Hacer visibles los cambios propios antes de releer evita perder deltas
+        # de una reserva/cambio en esta misma transacción (autoflush=False).
+        db.flush()
+        query = query.populate_existing().with_for_update()
     return query.first()
 
 
@@ -116,9 +132,10 @@ def _movement(db: Session, inventory: Inventory, movement_type: str, quantity: i
 
 def _expire_late(db: Session, reservation: Reservation, user: User) -> bool:
     """Marca como VENCIDA una reserva pendiente caducada y libera su stock. Devuelve True si se expiró."""
+    db.refresh(reservation, with_for_update=True)
     if reservation.status == "PENDIENTE" and _aware_to_utc_naive(reservation.expiration_date) < _utcnow_naive():
         reservation.status = "VENCIDA"
-        for item in reservation.items:
+        for item in sorted(reservation.items, key=lambda row: row.variant_id):
             inventory = _get_inventory(db, item.variant_id, reservation.branch_id, for_update=True)
             if inventory is not None:
                 _movement(db, inventory, "DEVOLUCION", item.quantity,
@@ -171,11 +188,11 @@ def _receipt_number(order: Order) -> str:
     return f"VC-{ts.strftime('%Y%m%d')}-{order.id}"
 
 
-def _staff_to_alert(db: Session) -> list[int]:
+def _staff_to_alert(db: Session, empresa_id: int | None) -> list[int]:
     return [
         u.id for u in db.query(User)
         .join(Role, User.role_id == Role.id)
-        .filter(User.is_active.is_(True),
+        .filter(User.empresa_id == empresa_id, User.is_active.is_(True),
                 Role.name.in_(["Administrador", "Encargado de Sucursal"]))
         .all()
     ]
@@ -187,18 +204,30 @@ def _deduct_order_stock(db: Session, order: Order, user: User) -> None:
     Se invoca únicamente cuando el pago se completa (CU18/CU19), de modo que un
     pago fallido jamás decrementa inventario.
     """
-    for item in order.items:
-        inventory = _get_inventory(db, item.variant_id, order.branch_id, for_update=True)
-        if inventory is None or inventory.available < item.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Stock insuficiente del item {item.variant_id} al confirmar el pago "
-                       f"(disponible {inventory.available if inventory else 0})",
-            )
+    stocks = _check_order_stock(db, order)
+    for item in sorted(order.items, key=lambda row: row.variant_id):
+        inventory = stocks[item.variant_id]
         _movement(db, inventory, "SALIDA", -item.quantity,
                   reason=f"Venta del pedido #{order.id}", user_id=user.id)
         if inventory.available == 0:
             _alert_out_of_stock(db, inventory, item.variant_id)
+
+
+def _check_order_stock(db, order):
+    stocks = {}
+    quantities = {}
+    for item in order.items:
+        quantities[item.variant_id] = quantities.get(item.variant_id, 0) + item.quantity
+    for variant_id, quantity in sorted(quantities.items()):
+        inventory = _get_inventory(db, variant_id, order.branch_id, for_update=True)
+        if inventory is None or inventory.available < quantity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Stock insuficiente del item {variant_id} al confirmar el pago "
+                       f"(disponible {inventory.available if inventory else 0})",
+            )
+        stocks[variant_id] = inventory
+    return stocks
 
 
 def _alert_out_of_stock(db: Session, inventory: Inventory, variant_id: int) -> None:
@@ -209,22 +238,27 @@ def _alert_out_of_stock(db: Session, inventory: Inventory, variant_id: int) -> N
     else:
         product = variant.product
         label = f"'{product.name}' ({variant.size_name}/{variant.color_name})"
-    _notify(db, _staff_to_alert(db), "Producto agotado",
+    _notify(db, _staff_to_alert(db, inventory.branch.empresa_id), "Producto agotado",
             f"El producto {label} quedó agotado en la sucursal #{inventory.branch_id}. "
             "Repón stock o revisa los movimientos.")
 
 
 def _complete_order_sale(db: Session, order: Order, user: User) -> None:
     """Confirma la venta: descuenta stock (si aplica) y marca el pedido como PAGADO."""
+    if order.status != 'PENDIENTE':
+        raise HTTPException(409, 'La venta ya fue procesada; no puede descontarse otra vez')
     if order.branch_id:
         _deduct_order_stock(db, order, user)
+    order.stock_deducted = True
     order.status = "PAGADO"
+    order.user_id = user.id
+    order.payment_method = order.payment.method if order.payment else None
     _notify(db, [order.client_id], "Pedido pagado",
             f"Tu pedido #{order.id} por ${order.total:,.2f} fue pagado correctamente.")
 
 
 def _process_payment(db: Session, order: Order, method: str, user: User,
-                     card_number: str | None = None) -> Payment:
+                     card_number: str | None = None, cash_received: float | None = None) -> Payment:
     """CU19: procesa el pago a través de la pasarela sandbox (o efectivo en tienda).
 
     - Éxito (tarjeta válida / efectivo / transferencia): COMPLETADO + `_complete_order_sale`.
@@ -239,12 +273,30 @@ def _process_payment(db: Session, order: Order, method: str, user: User,
 
     payment.method = method
     payment.amount = round(order.total, 2)
+    payment.cash_received = None
+    payment.change_amount = 0
+    if order.branch_id:
+        _check_order_stock(db, order)
+
+    def confirm_or_refund():
+        try:
+            _complete_order_sale(db, order, user)
+        except HTTPException as error:
+            if error.status_code != 409: raise
+            order.status = 'CANCELADO'
+            refund_all(db, order, user, 'Pago confirmado sin existencias para entregar la compra',
+                'SIN_STOCK', restock=False, gateway=get_gateway())
 
     if method == "EFECTIVO":
+        received = _money(order.total if cash_received is None else cash_received)
+        if received < _money(order.total):
+            raise HTTPException(422, 'El efectivo recibido no cubre el total de la venta')
+        payment.cash_received = float(received)
+        payment.change_amount = float(received - _money(order.total))
         payment.status = "COMPLETADO"
         payment.stripe_payment_id = f"pi_cash_{secrets.token_hex(8)}"
         payment.paid_at = datetime.now()
-        _complete_order_sale(db, order, user)
+        confirm_or_refund()
         return payment
 
     result = get_gateway().charge(order.total, method, {"card_number": card_number})
@@ -252,16 +304,17 @@ def _process_payment(db: Session, order: Order, method: str, user: User,
         payment.status = "COMPLETADO"
         payment.stripe_payment_id = result.transaction_id
         payment.paid_at = datetime.now()
-        _complete_order_sale(db, order, user)
+        confirm_or_refund()
     else:
         payment.status = "FALLIDO"
         payment.stripe_payment_id = result.transaction_id
     return payment
 
 
-def _get_or_create_mostrador(db: Session) -> User:
+def _get_or_create_mostrador(db: Session, empresa_id: int | None) -> User:
     """Cliente genérico para ventas de POS sin cliente registrado (CU18)."""
-    user = db.query(User).filter(User.email == "mostrador@fashionstore.com").first()
+    email = f"mostrador-{empresa_id}@fashionstore.com" if empresa_id else "mostrador@fashionstore.com"
+    user = db.query(User).filter(User.email == email, User.empresa_id == empresa_id).first()
     if user:
         return user
     role = db.query(Role).filter(Role.name == "Cliente").first()
@@ -269,10 +322,14 @@ def _get_or_create_mostrador(db: Session) -> User:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="El rol Cliente no está configurado")
     user = User(first_name="Cliente", last_name="Mostrador",
-                email="mostrador@fashionstore.com", hashed_password="!",
+                empresa_id=empresa_id, email=email, hashed_password="!",
                 is_active=True, role_id=role.id)
-    db.add(user)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(user)
+            db.flush()
+    except IntegrityError:
+        user = db.query(User).filter(User.email == email, User.empresa_id == empresa_id).one()
     return user
 
 
@@ -302,6 +359,8 @@ def _order_response(db: Session, o: Order) -> OrderResponse:
             "stripe_payment_id": o.payment.stripe_payment_id,
             "created_at": o.payment.created_at,
             "paid_at": o.payment.paid_at,
+            "cash_received": o.payment.cash_received,
+            "change_amount": o.payment.change_amount or 0,
         }
     return OrderResponse(
         id=o.id,
@@ -317,6 +376,8 @@ def _order_response(db: Session, o: Order) -> OrderResponse:
         created_at=o.created_at,
         items=items,
         payment=payment,
+        stock_deducted=o.stock_deducted,
+        **order_financials(db, o),
     )
 
 
@@ -360,7 +421,7 @@ def get_cart(user: User = Depends(get_current_user), db: Session = Depends(get_d
 @router.post("/cart", response_model=CartSummary, status_code=status.HTTP_201_CREATED,
              summary="Agregar un producto al carrito (CU16)")
 def add_to_cart(payload: CartItemCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _get_variant_or_404(db, payload.variant_id)
+    _get_variant_or_404(db, payload.variant_id, user)
 
     existing = db.query(CartItem).filter(
         CartItem.client_id == user.id, CartItem.variant_id == payload.variant_id
@@ -420,7 +481,7 @@ def clear_cart(user: User = Depends(get_current_user), db: Session = Depends(get
              summary="Reservar varias prendas (CU13)")
 def create_reservation(payload: ReservationCreate,
                        user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    branch = db.get(Branch, payload.branch_id)
+    branch = ensure_tenant_owns(db.get(Branch, payload.branch_id), user, include_global=False, label="Sucursal")
     if branch is None or not branch.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sucursal no encontrada")
 
@@ -438,10 +499,10 @@ def create_reservation(payload: ReservationCreate,
     db.flush()
 
     # Valida existencias y reserva el stock antes de confirmar
-    for item in payload.items:
-        variant = _get_variant_or_404(db, item.variant_id)
+    for quantity, variant_id, variant in _normalized_items([
+        (item.quantity, item.variant_id, _get_variant_or_404(db, item.variant_id, user)) for item in payload.items]):
         inventory = _get_inventory(db, variant.id, branch.id, for_update=True)
-        if inventory is None or inventory.available < item.quantity:
+        if inventory is None or inventory.available < quantity:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Stock insuficiente de '{variant.product.name}' ({variant.size_name}/{variant.color_name}) en {branch.name}",
@@ -450,16 +511,16 @@ def create_reservation(payload: ReservationCreate,
         db.add(ReservationItem(
             reservation=reservation,
             variant_id=variant.id,
-            quantity=item.quantity,
-            unit_price=variant.effective_price,
+            quantity=quantity,
+            unit_price=float(_money(variant.effective_price)),
         ))
-        _movement(db, inventory, "RESERVA", -item.quantity,
+        _movement(db, inventory, "RESERVA", -quantity,
                   reason=f"Reserva {reservation.code}", user_id=user.id)
 
     staff_ids = [
         u.id for u in db.query(User)
         .join(Role, User.role_id == Role.id)
-        .filter(Role.name.in_(["Administrador", "Encargado de Sucursal"]))
+        .filter(User.empresa_id == branch.empresa_id, Role.name.in_(["Administrador", "Encargado de Sucursal"]))
         .all()
     ]
     _notify(db, [user.id], "Reserva creada",
@@ -479,7 +540,7 @@ def list_reservations(status_filter: Optional[str] = None,
                       db: Session = Depends(get_db)):
     if all_reservations:
         require_staff(user)
-        query = db.query(Reservation)
+        query = db.query(Reservation).join(Branch).filter(Branch.empresa_id == user.empresa_id)
     else:
         query = db.query(Reservation).filter(Reservation.client_id == user.id)
 
@@ -498,7 +559,9 @@ def list_reservations(status_filter: Optional[str] = None,
 def get_reservation(reservation_id: int,
                     user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
-    r = db.get(Reservation, reservation_id)
+    r = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if r is not None:
+        ensure_tenant_owns(db.get(Branch, r.branch_id), user, include_global=False, label="Reserva")
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada")
     if r.client_id != user.id and user.role_name not in _STAFF_ROLES:
@@ -510,14 +573,14 @@ def get_reservation(reservation_id: int,
 @router.post("/reservations/expire-stale", summary="Expirar reservas pendientes vencidas (admin/sucursal)")
 def expire_stale_reservations(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_staff(user)
-    rows = db.query(Reservation).filter(Reservation.status == "PENDIENTE").all()
+    rows = db.query(Reservation).join(Branch).filter(Branch.empresa_id == user.empresa_id, Reservation.status == "PENDIENTE").with_for_update().all()
     expired = sum(1 for r in rows if _expire_late(db, r, user))
     db.commit()
     return {"expired": expired}
 
 
 def _release_reserved_stock(db: Session, reservation: Reservation, user: User) -> None:
-    for item in reservation.items:
+    for item in sorted(reservation.items, key=lambda row: row.variant_id):
         inventory = _get_inventory(db, item.variant_id, reservation.branch_id, for_update=True)
         if inventory is not None:
             _movement(db, inventory, "DEVOLUCION", item.quantity,
@@ -529,7 +592,9 @@ def _release_reserved_stock(db: Session, reservation: Reservation, user: User) -
 def cancel_reservation(reservation_id: int,
                        user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)):
-    r = db.get(Reservation, reservation_id)
+    r = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if r is not None:
+        ensure_tenant_owns(db.get(Branch, r.branch_id), user, include_global=False, label="Reserva")
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada")
     if r.client_id != user.id and user.role_name not in _STAFF_ROLES:
@@ -556,7 +621,9 @@ def attend_reservation(reservation_id: int,
                        user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)):
     require_staff(user)
-    r = db.get(Reservation, reservation_id)
+    r = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if r is not None:
+        ensure_tenant_owns(db.get(Branch, r.branch_id), user, include_global=False, label="Reserva")
     if r is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada")
     if _expire_late(db, r, user):
@@ -580,6 +647,52 @@ def attend_reservation(reservation_id: int,
 # ======================================================================
 
 
+@router.post("/reservations/{reservation_id}/expire", response_model=ReservationResponse,
+              summary="Marcar una reserva pendiente como vencida y liberar stock (staff)")
+def expire_reservation(reservation_id: int,
+                       user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    require_staff(user)
+    r = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if r is not None:
+        ensure_tenant_owns(db.get(Branch, r.branch_id), user, include_global=False, label="Reserva")
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada")
+    if r.status != "PENDIENTE":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"No se puede vencer una reserva en estado {r.status}")
+    r.status = "VENCIDA"
+    _release_reserved_stock(db, r, user)
+    _notify(db, [r.client_id], "Reserva vencida", f"Tu reserva {r.code} venció.")
+    db.commit()
+    db.refresh(r)
+    return _reservation_response(db, r)
+
+
+@router.delete("/reservations/{reservation_id}", response_model=ReservationResponse,
+               summary="Eliminar (cancelar) una reserva pendiente (CU14)")
+def delete_reservation(reservation_id: int,
+                       user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    r = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if r is not None:
+        ensure_tenant_owns(db.get(Branch, r.branch_id), user, include_global=False, label="Reserva")
+    if r is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada")
+    if r.client_id != user.id and user.role_name not in _STAFF_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="No puedes eliminar esta reserva")
+    if r.status != "PENDIENTE":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"No se puede eliminar una reserva en estado {r.status}")
+    r.status = "CANCELADA"
+    _release_reserved_stock(db, r, user)
+    _notify(db, [r.client_id], "Reserva cancelada", f"Tu reserva {r.code} fue cancelada.")
+    db.commit()
+    db.refresh(r)
+    return _reservation_response(db, r)
+
+
 @router.post("/orders/checkout", response_model=OrderResponse, status_code=status.HTTP_201_CREATED,
              summary="Generar pedido desde carrito/sucursal y registrar pago (CU16, CU17, CU19)")
 def checkout(payload: OrderCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -591,7 +704,7 @@ def checkout(payload: OrderCreate, user: User = Depends(get_current_user), db: S
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La venta presencial requiere items")
         source_items: list[tuple[int, int, ProductVariant]] = []
         for it in payload.items:
-            variant = _get_variant_or_404(db, it.variant_id)
+            variant = _get_variant_or_404(db, it.variant_id, user)
             source_items.append((it.quantity, variant.id, variant))
     else:
         cart_rows = db.query(CartItem).filter(CartItem.client_id == user.id).all()
@@ -599,23 +712,35 @@ def checkout(payload: OrderCreate, user: User = Depends(get_current_user), db: S
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El carrito está vacío")
         source_items = []
         for row in cart_rows:
-            variant = db.get(ProductVariant, row.variant_id)
-            if variant is None:
-                continue
+            variant = _get_variant_or_404(db, row.variant_id, user)
             source_items.append((row.quantity, variant.id, variant))
 
     if not source_items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No hay productos válidos en el pedido")
 
+    source_items = _normalized_items(source_items)
+
     branch = None
     if payload.branch_id:
-        branch = db.get(Branch, payload.branch_id)
+        branch = ensure_tenant_owns(db.get(Branch, payload.branch_id), user, include_global=False, label="Sucursal")
         if branch is None or not branch.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sucursal no encontrada")
 
+    if branch is None:
+        quantities = {}
+        for qty, vid, _ in source_items:
+            quantities[vid] = quantities.get(vid, 0) + qty
+        for candidate in db.query(Branch).filter(Branch.empresa_id == user.empresa_id, Branch.is_active.is_(True)).order_by(Branch.id):
+            if all((stock := _get_inventory(db, vid, candidate.id, for_update=True)) is not None and stock.available >= qty for vid, qty in quantities.items()):
+                branch = candidate
+                break
+        if branch is None:
+            raise HTTPException(status_code=409, detail="No hay una sucursal con existencias para completar la compra")
+
     order = Order(
         client_id=user.id,
-        branch_id=payload.branch_id,
+        branch_id=branch.id,
+        empresa_id=branch.empresa_id if branch is not None else user.empresa_id,
         order_type=order_type,
         status="PENDIENTE",
         shipping_address=payload.shipping_address,
@@ -623,7 +748,7 @@ def checkout(payload: OrderCreate, user: User = Depends(get_current_user), db: S
     db.add(order)
     db.flush()
 
-    total = 0.0
+    total = Decimal('0.00')
     for quantity, variant_id, variant in source_items:
         # Validación previa de existencias (el descuento real ocurre al pagar, CU20)
         if branch is not None:
@@ -636,30 +761,48 @@ def checkout(payload: OrderCreate, user: User = Depends(get_current_user), db: S
 
         unit_price = variant.effective_price
         promotion_id, per_unit_discount = promotion_discount_for_variant(db, variant)
-        line_discount = round(per_unit_discount * quantity, 2)
-        total += unit_price * quantity - line_discount
+        unit_price = float(_money(unit_price))
+        line_discount = float(_money(per_unit_discount) * quantity)
+        total += _money(unit_price) * quantity - _money(line_discount)
         db.add(OrderItem(order=order, variant_id=variant_id, quantity=quantity,
                          unit_price=unit_price, discount=line_discount, promotion_id=promotion_id))
 
-    order.total = round(total, 2)
-
-    if order_type == "DIGITAL":
-        db.query(CartItem).filter(CartItem.client_id == user.id).delete()
+    order.total = float(total)
 
     payment = _process_payment(db, order, payload.payment_method or "TARJETA", user,
                                payload.card_number)
     db.flush()
 
     # CU19: compra digital con pago rechazado → el pedido se cancela y NO se cobra ni descuenta.
+    # El carrito se conserva para que el cliente pueda reintentar el pago.
     if order_type == "DIGITAL" and payment.status == "FALLIDO":
         order.status = "CANCELADO"
         _notify(db, [user.id], "Pago rechazado",
                 f"El pago de tu pedido #{order.id} fue rechazado por la pasarela. "
                 "El pedido fue cancelado y puedes volver a intentarlo.")
+    elif order_type == "DIGITAL":
+        db.query(CartItem).filter(CartItem.client_id == user.id).delete()
 
     db.commit()
     db.refresh(order)
     return _order_response(db, order)
+
+
+def _normalized_items(source_items):
+    combined = {}
+    for quantity, variant_id, variant in source_items:
+        if variant_id not in combined: combined[variant_id] = [0, variant_id, variant]
+        combined[variant_id][0] += quantity
+    return [tuple(combined[key]) for key in sorted(combined)]
+
+
+def _repeated_sale(db, payload, user, fingerprint):
+    if not payload.request_id: return None
+    previous = db.query(Order).filter(Order.request_id == payload.request_id.lower()).first()
+    if previous is None: return None
+    if previous.empresa_id != user.empresa_id or previous.user_id != user.id or previous.request_fingerprint != fingerprint:
+        raise HTTPException(409, 'Este identificador ya corresponde a otra operación')
+    return _order_response(db, previous)
 
 
 @router.post("/pos/sale", response_model=OrderResponse, status_code=status.HTTP_201_CREATED,
@@ -668,44 +811,63 @@ def pos_sale(payload: PosSaleCreate, user: User = Depends(get_current_user),
              db: Session = Depends(get_db)):
     require_staff(user)
 
-    branch = db.get(Branch, payload.branch_id)
+    fingerprint = hashlib.sha256(json.dumps({
+        'branch': payload.branch_id, 'client': payload.client_id, 'method': payload.payment_method,
+        'cash': payload.cash_received,
+        'items': sorted((item.variant_id, item.quantity) for item in payload.items),
+    }, sort_keys=True).encode()).hexdigest()
+    repeated = _repeated_sale(db, payload, user, fingerprint)
+    if repeated is not None: return repeated
+
+    branch = ensure_tenant_owns(db.get(Branch, payload.branch_id), user, include_global=False, label="Sucursal")
     if branch is None or not branch.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sucursal no encontrada")
 
-    client_id = payload.client_id or _get_or_create_mostrador(db).id
-    if db.get(User, client_id) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cliente no encontrado")
+    client_id = payload.client_id or _get_or_create_mostrador(db, user.empresa_id).id
+    ensure_tenant_owns(db.get(User, client_id), user, include_global=False, label="Cliente")
 
     # Valida existencias antes de cobrar; el descuento ocurre solo al confirmar el pago.
     source_items = []
-    for it in payload.items:
-        variant = _get_variant_or_404(db, it.variant_id)
+    for quantity, variant_id, variant in _normalized_items([
+        (it.quantity, it.variant_id, _get_variant_or_404(db, it.variant_id, user)) for it in payload.items]):
         inventory = _get_inventory(db, variant.id, branch.id, for_update=True)
-        if inventory is None or inventory.available < it.quantity:
+        # Un reintento concurrente puede haber esperado a que el primero termine.
+        repeated = _repeated_sale(db, payload, user, fingerprint)
+        if repeated is not None: return repeated
+        if inventory is None or inventory.available < quantity:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Stock insuficiente de '{variant.product.name}' ({variant.size_name}/{variant.color_name}) en {branch.name}",
             )
-        source_items.append((it.quantity, variant.id, variant))
+        source_items.append((quantity, variant.id, variant))
 
-    order = Order(client_id=client_id, branch_id=branch.id, order_type="PRESENCIAL",
-                  status="PENDIENTE")
+    order = Order(client_id=client_id, branch_id=branch.id,
+                  empresa_id=branch.empresa_id, order_type="PRESENCIAL",
+                  user_id=user.id, request_id=payload.request_id.lower() if payload.request_id else None,
+                  request_fingerprint=fingerprint, status="PENDIENTE")
     db.add(order)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        repeated = _repeated_sale(db, payload, user, fingerprint)
+        if repeated is not None: return repeated
+        raise
 
-    total = 0.0
+    total = Decimal('0.00')
     for quantity, variant_id, variant in source_items:
         unit_price = variant.effective_price
         promotion_id, per_unit_discount = promotion_discount_for_variant(db, variant)
-        line_discount = round(per_unit_discount * quantity, 2)
-        total += unit_price * quantity - line_discount
+        unit_price = float(_money(unit_price))
+        line_discount = float(_money(per_unit_discount) * quantity)
+        total += _money(unit_price) * quantity - _money(line_discount)
         db.add(OrderItem(order=order, variant_id=variant_id, quantity=quantity,
                          unit_price=unit_price, discount=line_discount, promotion_id=promotion_id))
-    order.total = round(total, 2)
+    order.total = float(total)
 
     # Efectivo/transferencia confirma al instante; tarjeta declinada deja el pedido
     # PENDIENTE para reintentar con POST /orders/{id}/pay (CU19).
-    payment = _process_payment(db, order, payload.payment_method, user, payload.card_number)
+    payment = _process_payment(db, order, payload.payment_method, user, payload.card_number, payload.cash_received)
     db.flush()
 
     db.commit()
@@ -717,7 +879,9 @@ def pos_sale(payload: PosSaleCreate, user: User = Depends(get_current_user),
              summary="Completar o reintentar el pago de un pedido pendiente (CU19)")
 def pay_order(order_id: int, payload: PayRequest, user: User = Depends(get_current_user),
               db: Session = Depends(get_db)):
-    o = db.get(Order, order_id)
+    o = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+    if o is not None:
+        ensure_tenant_owns(o, user, include_global=False, label="Pedido")
     if o is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
     if o.client_id != user.id and user.role_name not in _STAFF_ROLES:
@@ -726,7 +890,7 @@ def pay_order(order_id: int, payload: PayRequest, user: User = Depends(get_curre
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"El pedido #{o.id} no está pendiente de pago (estado: {o.status})")
 
-    payment = _process_payment(db, o, payload.payment_method, user, payload.card_number)
+    payment = _process_payment(db, o, payload.payment_method, user, payload.card_number, payload.cash_received)
     db.flush()
 
     if o.order_type == "DIGITAL" and payment.status == "FALLIDO":
@@ -742,7 +906,7 @@ def pay_order(order_id: int, payload: PayRequest, user: User = Depends(get_curre
 @router.get("/orders", response_model=list[OrderResponse], summary="Listar pedidos")
 def list_orders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if user.role_name in _STAFF_ROLES:
-        rows = db.query(Order).order_by(Order.id.desc()).all()
+        rows = scope_to_empresa(db.query(Order), Order, user, include_global=False).order_by(Order.id.desc()).all()
     else:
         rows = db.query(Order).filter(Order.client_id == user.id).order_by(Order.id.desc()).all()
     return [_order_response(db, o) for o in rows]
@@ -750,7 +914,9 @@ def list_orders(user: User = Depends(get_current_user), db: Session = Depends(ge
 
 @router.get("/orders/{order_id}", response_model=OrderResponse, summary="Consultar un pedido")
 def get_order(order_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    o = db.get(Order, order_id)
+    o = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+    if o is not None:
+        ensure_tenant_owns(o, user, include_global=False, label="Pedido")
     if o is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
     if o.client_id != user.id and user.role_name not in _STAFF_ROLES:
@@ -764,7 +930,9 @@ def update_order_status(order_id: int, payload: OrderStatusUpdate,
                         user: User = Depends(get_current_user),
                         db: Session = Depends(get_db)):
     require_staff(user)
-    o = db.get(Order, order_id)
+    o = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+    if o is not None:
+        ensure_tenant_owns(o, user, include_global=False, label="Pedido")
     if o is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
 
@@ -778,17 +946,111 @@ def update_order_status(order_id: int, payload: OrderStatusUpdate,
             detail=f"Transición no permitida: {o.status} → {new_status}",
         )
 
-    if new_status == "CANCELADO" and o.status in ("PAGADO", "ENVIADO") and o.branch_id:
-        for item in o.items:
-            inventory = _get_inventory(db, item.variant_id, o.branch_id, for_update=True)
-            if inventory is not None:
-                _movement(db, inventory, "DEVOLUCION", item.quantity,
-                          reason=f"Anulación del pedido #{o.id}", user_id=user.id)
+    if new_status == "CANCELADO" and o.status in ("PAGADO", "ENVIADO"):
+        if user.role_name not in {'Administrador','Encargado de Sucursal'}:
+            raise HTTPException(403,'Solo administración o el encargado pueden anular una compra pagada')
+        if o.status == 'ENVIADO':
+            raise HTTPException(409, 'Una compra enviada requiere registrar la devolución de las prendas recibidas en Reembolsos')
+        refund_all(db, o, user, f'Cancelación del pedido #{o.id}', 'CANCELACION', restock=o.stock_deducted)
         _notify(db, [o.client_id], "Pedido cancelado", f"Tu pedido #{o.id} fue cancelado.")
     o.status = new_status
     db.commit()
     db.refresh(o)
     return _order_response(db, o)
+
+
+@router.post('/orders/{order_id}/refunds', response_model=OrderResponse, status_code=201)
+def refund_order(order_id:int, payload:RefundCreate, user:User=Depends(get_current_user), db:Session=Depends(get_db)):
+    if user.role_name not in {'Administrador','Encargado de Sucursal'}:
+        raise HTTPException(403,'Solo administración o el encargado pueden confirmar reembolsos')
+    order=db.query(Order).filter(Order.id==order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    create_refund(db,order,user,payload,gateway=get_gateway())
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
+
+
+@router.post('/orders/{order_id}/refunds/{refund_id}/retry', response_model=OrderResponse)
+def retry_refund(order_id:int,refund_id:int,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
+    if user.role_name not in {'Administrador','Encargado de Sucursal'}:
+        raise HTTPException(403,'Solo administración o el encargado pueden confirmar reembolsos')
+    order=db.query(Order).filter(Order.id==order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    refund=db.query(Refund).filter_by(id=refund_id,order_id=order_id).first()
+    if refund is None: raise HTTPException(404,'Reembolso no encontrado')
+    if refund.status not in {'PENDIENTE','COMPLETADO'}:
+        raise HTTPException(409,'La solicitud requiere una decisión del encargado antes de procesarse')
+    complete_refund(db,refund,user,gateway=get_gateway())
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
+
+
+@router.post('/orders/{order_id}/refund-requests',response_model=OrderResponse,status_code=201)
+def request_refund(order_id:int,payload:RefundCreate,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
+    order=db.query(Order).filter(Order.id==order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    if order.client_id!=user.id: raise HTTPException(403,'Solo puedes solicitar devoluciones de tus compras')
+    if payload.restock: raise HTTPException(422,'El encargado verificará la recepción de las prendas')
+    create_refund(db,order,user,payload,source='SOLICITUD_CLIENTE',execute=False)
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
+
+
+@router.post('/orders/{order_id}/refunds/{refund_id}/restock',response_model=OrderResponse)
+def return_refunded_stock(order_id:int,refund_id:int,payload:StockReturnInput,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
+    if user.role_name not in {'Administrador','Encargado de Sucursal'}: raise HTTPException(403,'Requiere administración o encargado')
+    order=db.query(Order).filter_by(id=order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    previous=db.query(RefundStockReturn).filter_by(request_id=payload.request_id.lower()).first()
+    if previous:
+        if previous.order_id!=order_id or previous.refund_item_id!=payload.refund_item_id or previous.quantity!=payload.quantity:
+            raise HTTPException(409,'El identificador pertenece a otra recepción')
+        return _order_response(db,order)
+    refund=db.query(Refund).filter_by(id=refund_id,order_id=order_id,status='COMPLETADO').first()
+    if refund is None: raise HTTPException(404,'Reembolso confirmado no encontrado')
+    item=next((item for item in refund.items if item.id==payload.refund_item_id),None)
+    if not item or payload.quantity > item.quantity-item.restocked_quantity: raise HTTPException(409,'La cantidad supera las prendas pendientes de recepción')
+    if not order.stock_deducted or not order.branch_id: raise HTTPException(409,'Esta compra no descontó inventario')
+    inventory=_get_inventory(db,item.variant_id,order.branch_id,for_update=True)
+    if inventory is None: raise HTTPException(409,'Registra el inventario de la variante en la sucursal antes de recibirla')
+    _movement(db,inventory,'DEVOLUCION',payload.quantity,f'Recepción posterior a RF-{refund.id:08d}, sin nuevo pago',user.id)
+    item.restocked_quantity+=payload.quantity
+    db.add(RefundStockReturn(request_id=payload.request_id.lower(),order_id=order.id,refund_item_id=item.id,quantity=payload.quantity,user_id=user.id))
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
+
+
+@router.post('/orders/{order_id}/refunds/{refund_id}/decision',response_model=OrderResponse)
+def decide_refund(order_id:int,refund_id:int,payload:RefundDecision,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
+    if user.role_name not in {'Administrador','Encargado de Sucursal'}: raise HTTPException(403,'Requiere administración o encargado')
+    order=db.query(Order).filter(Order.id==order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    refund=db.query(Refund).filter_by(id=refund_id,order_id=order_id).first()
+    if refund is None: raise HTTPException(404,'Solicitud no encontrada')
+    if refund.status=='COMPLETADO' and payload.approve: return _order_response(db,order)
+    if refund.status!='SOLICITADO': raise HTTPException(409,'Esta solicitud ya fue resuelta')
+    if not payload.approve:
+        refund.status='RECHAZADO';refund.error=payload.comment.strip() or 'Solicitud rechazada por el encargado'
+    else:
+        for item in refund.items: item.restock=payload.restock and item.quantity>0
+        refund.status='PENDIENTE'
+        complete_refund(db,refund,user,gateway=get_gateway())
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
+
+
+@router.post('/orders/{order_id}/refunds/{refund_id}/withdraw',response_model=OrderResponse)
+def withdraw_refund_request(order_id:int,refund_id:int,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
+    order=db.query(Order).filter_by(id=order_id).with_for_update().first()
+    ensure_tenant_owns(order,user,include_global=False,label='Pedido')
+    if order.client_id!=user.id: raise HTTPException(403,'Solo puedes retirar tus propias solicitudes')
+    refund=db.query(Refund).filter_by(id=refund_id,order_id=order_id).first()
+    if refund is None: raise HTTPException(404,'Solicitud no encontrada')
+    if refund.status=='CANCELADO': return _order_response(db,order)
+    if refund.status!='SOLICITADO': raise HTTPException(409,'La devolución ya fue procesada; no puede retirarse')
+    refund.status='CANCELADO';refund.error='Solicitud retirada por el cliente'
+    db.commit();db.refresh(order)
+    return _order_response(db,order)
 
 
 # ======================================================================
@@ -818,3 +1080,114 @@ def mark_notification_read(notification_id: int,
     db.refresh(n)
     return NotificationResponse(id=n.id, user_id=n.user_id, title=n.title, message=n.message,
                                 is_read=n.is_read, created_at=n.created_at)
+
+
+@router.post('/reservations/{reservation_id}/checkout', response_model=OrderResponse, status_code=201)
+def checkout_reservation(reservation_id: int, payload: ReservationCheckoutRequest,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_staff(user)
+    reservation = db.query(Reservation).filter(Reservation.id == reservation_id).with_for_update().first()
+    if reservation is None:
+        raise HTTPException(404, 'Reserva no encontrada')
+    ensure_tenant_owns(db.get(Branch, reservation.branch_id), user, include_global=False, label='Reserva')
+    if _expire_late(db, reservation, user) or reservation.status not in {'PENDIENTE', 'ATENDIDA'}:
+        raise HTTPException(409, 'La reserva ya no est? disponible para comprar')
+    reserved, requested = {}, {}
+    for item in reservation.items:
+        reserved[item.variant_id] = reserved.get(item.variant_id, 0) + item.quantity
+    for item in payload.items:
+        requested[item.variant_id] = requested.get(item.variant_id, 0) + item.quantity
+    if any(qty > reserved.get(vid, 0) for vid, qty in requested.items()):
+        raise HTTPException(422, 'Solo se pueden comprar las cantidades reservadas')
+    _release_reserved_stock(db, reservation, user)
+    reservation.status = 'COMPRADA'
+    reservation.attend_date = datetime.now(timezone.utc)
+    sale = PosSaleCreate(branch_id=reservation.branch_id, client_id=reservation.client_id,
+        items=[{'variant_id': vid, 'quantity': qty} for vid, qty in requested.items()], payment_method='EFECTIVO')
+    return pos_sale(sale, user=user, db=db)
+
+
+@router.post('/reservations/{reservation_id}/finish', response_model=ReservationResponse)
+def finish_reservation(reservation_id: int, user: User=Depends(get_current_user), db: Session=Depends(get_db)):
+    require_staff(user)
+    reservation = db.query(Reservation).filter(Reservation.id==reservation_id).with_for_update().first()
+    if not reservation:
+        raise HTTPException(404, 'Reserva no encontrada')
+    ensure_tenant_owns(db.get(Branch, reservation.branch_id), user, include_global=False, label='Reserva')
+    if reservation.status != 'ATENDIDA':
+        raise HTTPException(409, 'Solo se puede finalizar una reserva atendida')
+    _release_reserved_stock(db, reservation, user)
+    reservation.status = 'FINALIZADA'
+    db.commit(); db.refresh(reservation)
+    return _reservation_response(db, reservation)
+
+
+def _exchange_response(record):
+    return {'id': record.id, 'venta_id': record.venta_id, 'empresa_id': record.empresa_id,
+        'estado': record.estado, 'fecha_solicitud': record.fecha_solicitud, 'fecha_limite': record.fecha_limite,
+        'monto_diferencia': record.monto_diferencia, 'detalle': json.loads(record.detalle_json or '{}'), 'observaciones': record.observaciones}
+
+
+@router.get('/orders/{order_id}/exchanges')
+def list_exchanges(order_id: int, user: User=Depends(get_current_user), db: Session=Depends(get_db)):
+    order = db.get(Order, order_id)
+    ensure_tenant_owns(order, user, include_global=False, label='Pedido')
+    if user.role_name not in _STAFF_ROLES and order.client_id != user.id:
+        raise HTTPException(403, 'No puedes consultar este pedido')
+    return [_exchange_response(row) for row in db.query(CambioPrenda).filter(CambioPrenda.venta_id==order_id).order_by(CambioPrenda.id.desc())]
+
+
+@router.post('/orders/{order_id}/exchanges', status_code=201)
+def exchange_garment(order_id: int, payload: ExchangeRequest, user: User=Depends(get_current_user), db: Session=Depends(get_db)):
+    require_staff(user)
+    order = db.query(Order).filter(Order.id==order_id).with_for_update().first()
+    ensure_tenant_owns(order, user, include_global=False, label='Pedido')
+    if order.empresa_id is None:
+        raise HTTPException(409, 'Asigna la venta a una empresa antes de registrar cambios')
+    deadline = _aware_to_utc_naive(order.created_at) + timedelta(days=settings.EXCHANGE_WINDOW_DAYS)
+    if order.status not in {'PAGADO', 'ENVIADO', 'ENTREGADO'} or not order.branch_id or deadline < _utcnow_naive():
+        raise HTTPException(409, f'El cambio requiere una venta confirmada dentro de {settings.EXCHANGE_WINDOW_DAYS} d?as')
+    item = next((i for i in order.items if i.id == payload.order_item_id), None)
+    if item is None:
+        raise HTTPException(404, 'Prenda no encontrada en la venta')
+    previous = db.query(CambioPrenda).filter(CambioPrenda.venta_id==order_id, CambioPrenda.estado=='APROBADO').all()
+    returned = 0
+    if any(r.status in {'PENDIENTE','SOLICITADO'} for r in order.refunds):
+        raise HTTPException(409,'Resuelve el reembolso pendiente antes de cambiar prendas')
+    for refund in order.refunds:
+        if refund.status == 'COMPLETADO':
+            returned += sum(r.quantity for r in refund.items if r.lot_key == f'item:{item.id}')
+    for old in previous:
+        details = json.loads(old.detalle_json or '{}')
+        if details.get('order_item_id') == item.id:
+            returned += details.get('quantity', 0)
+    if returned + payload.quantity > item.quantity:
+        raise HTTPException(409, 'La cantidad supera las prendas que a?n pueden cambiarse')
+    replacement = _get_variant_or_404(db, payload.replacement_variant_id, user)
+    from app.services.refunds import returnable_lots
+    lot = next((lot for lot in returnable_lots(db,order) if lot['key']==f'item:{item.id}'),None)
+    if not lot or not lot['quantity']:
+        raise HTTPException(409,'Esta prenda ya no tiene unidades pendientes para cambiar')
+    old_unit_price = float(lot['amount']/lot['quantity'])
+    _, discount = promotion_discount_for_variant(db, replacement)
+    new_unit_price = float(_money(replacement.effective_price) - _money(discount))
+    difference = float(_money(Decimal(str(new_unit_price-old_unit_price))*payload.quantity))
+    if abs(difference-payload.cash_difference)>0.01:
+        raise HTTPException(422, f'Registra la diferencia exacta en efectivo: Bs {difference:.2f}. Un monto negativo representa devoluci?n al cliente.')
+    # Orden estable de bloqueos para evitar interbloqueos entre cambios cruzados.
+    stocks = {vid: _get_inventory(db, vid, order.branch_id, for_update=True) for vid in sorted({item.variant_id, replacement.id})}
+    source, target = stocks[item.variant_id], stocks[replacement.id]
+    if source is None or target is None:
+        raise HTTPException(409, 'No hay inventario de las prendas en la sucursal de la venta')
+    effective_available = target.available + (payload.quantity if item.variant_id == replacement.id else 0)
+    if effective_available < payload.quantity:
+        raise HTTPException(409, 'No hay existencias suficientes de la prenda de reemplazo')
+    _movement(db, source, 'DEVOLUCION', payload.quantity, f'Cambio de la venta #{order.id}', user.id)
+    _movement(db, target, 'SALIDA', -payload.quantity, f'Entrega por cambio de la venta #{order.id}', user.id)
+    record = CambioPrenda(empresa_id=order.empresa_id, venta_id=order.id, usuario_id=user.id,
+        fecha_limite=deadline, estado='APROBADO', monto_diferencia=difference, observaciones=payload.observations,
+        detalle_json=json.dumps({'order_item_id': item.id, 'original_variant_id': item.variant_id,
+            'replacement_variant_id': replacement.id, 'quantity': payload.quantity, 'old_unit_price': old_unit_price,
+            'new_unit_price': new_unit_price, 'forma_pago': 'EFECTIVO'}))
+    db.add(record); db.commit(); db.refresh(record)
+    return _exchange_response(record)

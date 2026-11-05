@@ -1,3 +1,18 @@
+import com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION
+
+subprojects {
+    // Algunos plugins de ML Kit todavía declaran AGP 7.4.2. Todos los módulos
+    // deben usar la versión de Android ya seleccionada por la aplicación.
+    buildscript.configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.android.tools.build" && requested.name == "gradle") {
+                useVersion(ANDROID_GRADLE_PLUGIN_VERSION)
+                because("La aplicación y sus plugins comparten la misma herramienta de compilación Android")
+            }
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()

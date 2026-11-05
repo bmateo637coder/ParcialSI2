@@ -161,6 +161,40 @@ def test_cancel_reservation_releases_stock(client, client_token, catalog):
     assert row["available"] == 10
 
 
+def test_delete_reservation_releases_stock(client, client_token, catalog):
+    headers = _client_headers(client_token)
+    r = client.post(
+        "/api/reservations",
+        json={"branch_id": catalog["branch_id"], "items": [{"variant_id": catalog["variant_id"], "quantity": 2}]},
+        headers=headers,
+    ).json()
+
+    deleted = client.delete(f"/api/reservations/{r['id']}", headers=headers)
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["status"] == "CANCELADA"
+
+    availability = client.get(f"/api/inventory/availability?branch_id={catalog['branch_id']}").json()
+    row = next(x for x in availability if x["variant_id"] == catalog["variant_id"])
+    assert row["available"] == 10
+
+
+def test_staff_can_force_expire_reservation(client, client_token, encargado_token, catalog):
+    r = client.post(
+        "/api/reservations",
+        json={"branch_id": catalog["branch_id"], "items": [{"variant_id": catalog["variant_id"], "quantity": 2}]},
+        headers=_client_headers(client_token),
+    ).json()
+
+    expired = client.post(f"/api/reservations/{r['id']}/expire",
+                          headers=_client_headers(encargado_token))
+    assert expired.status_code == 200, expired.text
+    assert expired.json()["status"] == "VENCIDA"
+
+    availability = client.get(f"/api/inventory/availability?branch_id={catalog['branch_id']}").json()
+    row = next(x for x in availability if x["variant_id"] == catalog["variant_id"])
+    assert row["available"] == 10
+
+
 def test_attend_then_cancel_rejected(client, client_token, encargado_token, catalog):
     r = client.post(
         "/api/reservations",

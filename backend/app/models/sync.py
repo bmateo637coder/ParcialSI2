@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -59,6 +59,8 @@ class CambioPrenda(Base):
     fecha_limite = Column(DateTime(timezone=True))
     estado = Column(String(20), default="PENDIENTE")  # PENDIENTE | APROBADO | RECHAZADO
     observaciones = Column(Text)
+    detalle_json = Column(Text)
+    monto_diferencia = Column(Float, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     empresa = relationship("Empresa")

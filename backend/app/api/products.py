@@ -6,7 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_admin
+from app.core.security import get_optional_current_user, require_admin
+from app.core.tenant import ensure_tenant_owns, scope_to_empresa
+from app.core.storefront import PublicStorefront, get_catalog_context
 from app.models.catalog import (
     Category,
     Collection,
@@ -45,11 +47,42 @@ from app.schemas import (
 router = APIRouter()
 
 
-def _get_product_or_404(db: Session, product_id: int) -> Product:
+def _get_product_or_404(
+    db: Session,
+    product_id: int,
+    user=None,
+    *,
+    include_global: bool = True,
+) -> Product:
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
+    ensure_tenant_owns(product, user, include_global=include_global and not isinstance(user, PublicStorefront), label="Producto")
+    if isinstance(user, PublicStorefront) and not product.is_active:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
     return product
+
+
+def _visible_products(query, user):
+    """Catálogo visible: el tenant ve lo suyo y el catálogo maestro; el
+    visitante anónimo solo ve el catálogo maestro."""
+    return scope_to_empresa(query, Product, user, include_global=not isinstance(user, PublicStorefront))
+
+
+def _catalog_response(product, context):
+    if isinstance(context, PublicStorefront):
+        # La ficha pública no incluye los datos comerciales del proveedor.
+        return ProductResponse.model_validate(product).model_copy(update={"provider": None, "provider_id": None})
+    return product
+
+
+def _validate_references(db, data, user):
+    for key, model in (("category_id", Category), ("provider_id", Provider), ("season_id", Season), ("collection_id", Collection)):
+        if data.get(key) is not None:
+            resource = db.get(model, data[key])
+            if resource is None:
+                raise HTTPException(400, "Referencia de producto inválida")
+            ensure_tenant_owns(resource, user, label="Referencia de producto")
 
 
 # ======================================================================
@@ -66,9 +99,10 @@ def get_products(
     provider_id: Optional[int] = None,
     include_inactive: bool = False,
     db: Session = Depends(get_db),
+    current_user=Depends(get_catalog_context),
 ):
-    query = db.query(Product)
-    if not include_inactive:
+    query = _visible_products(db.query(Product), current_user)
+    if not include_inactive or isinstance(current_user, PublicStorefront):
         query = query.filter(Product.is_active.is_(True))
     if q:
         like = f"%{q.strip()}%"
@@ -81,15 +115,20 @@ def get_products(
         query = query.filter(Product.collection_id == collection_id)
     if provider_id:
         query = query.filter(Product.provider_id == provider_id)
-    return query.order_by(Product.created_at.desc()).all()
+    return [_catalog_response(product, current_user) for product in query.order_by(Product.created_at.desc()).all()]
 
 
 @router.get("/{product_id}", response_model=ProductResponse, summary="Obtener un producto")
-def get_product(product_id: int, include_inactive: bool = False, db: Session = Depends(get_db)):
-    product = _get_product_or_404(db, product_id)
-    if not include_inactive and not product.is_active:
+def get_product(
+    product_id: int,
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_catalog_context),
+):
+    product = _get_product_or_404(db, product_id, current_user)
+    if (not include_inactive or isinstance(current_user, PublicStorefront)) and not product.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
-    return product
+    return _catalog_response(product, current_user)
 
 
 @router.post(
@@ -103,7 +142,8 @@ def create_product(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    product = Product(**payload.model_dump())
+    _validate_references(db, payload.model_dump(), _admin)
+    product = Product(**payload.model_dump(), empresa_id=_admin.empresa_id)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -121,8 +161,9 @@ def update_product(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    product = _get_product_or_404(db, product_id)
+    product = _get_product_or_404(db, product_id, _admin, include_global=False)
     data = payload.model_dump(exclude_unset=True)
+    _validate_references(db, data, _admin)
     for field, value in data.items():
         setattr(product, field, value)
     db.commit()
@@ -136,7 +177,7 @@ def update_product(
     summary="Eliminar producto (admin)",
 )
 def delete_product(product_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    product = _get_product_or_404(db, product_id)
+    product = _get_product_or_404(db, product_id, _admin, include_global=False)
     product.is_active = False
     db.commit()
 
@@ -151,22 +192,24 @@ def delete_product(product_id: int, _admin=Depends(require_admin), db: Session =
     response_model=list[VariantResponse],
     summary="Listar variantes de un producto",
 )
-def get_variants(product_id: int, db: Session = Depends(get_db)):
-    _get_product_or_404(db, product_id)
-    variants = (
-        db.query(ProductVariant)
-        .filter(ProductVariant.product_id == product_id)
-        .order_by(ProductVariant.id)
-        .all()
-    )
+def get_variants(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_catalog_context),
+):
+    _get_product_or_404(db, product_id, current_user)
+    query = db.query(ProductVariant).filter(ProductVariant.product_id == product_id)
+    if isinstance(current_user, PublicStorefront):
+        query = query.filter(ProductVariant.is_active.is_(True))
+    variants = query.order_by(ProductVariant.id).all()
     if not variants:
         return []
 
-    _load_real_stocks(db, variants)
+    _load_real_stocks(db, variants, current_user)
     return variants
 
 
-def _load_real_stocks(db: Session, variants: list[ProductVariant]) -> None:
+def _load_real_stocks(db: Session, variants: list[ProductVariant], user=None) -> None:
     """Sobrescribe `stock` de cada variante con la existencia REAL agregada de la
     tabla `inventory` (por sucursal). La columna `product_variants.stock` nunca se
     llena con el seed, así que el catálogo caía en 'Agotado' a pesar de haber stock."""
@@ -177,6 +220,7 @@ def _load_real_stocks(db: Session, variants: list[ProductVariant]) -> None:
             func.coalesce(func.sum(Inventory.available), 0),
         )
         .filter(Inventory.variant_id.in_(variant_ids))
+        .join(Inventory.branch).filter(Inventory.branch.has(empresa_id=user.empresa_id if user else None))
         .group_by(Inventory.variant_id)
         .all()
     )
@@ -196,7 +240,7 @@ def create_variant(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    product = _get_product_or_404(db, product_id)
+    product = _get_product_or_404(db, product_id, _admin, include_global=False)
 
     if not db.get(Size, payload.size_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Talla inválida")
@@ -231,6 +275,7 @@ def update_variant(
     variant = db.get(ProductVariant, variant_id)
     if variant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+    _get_product_or_404(db, variant.product_id, _admin, include_global=False)
     data = payload.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(variant, field, value)
@@ -248,6 +293,7 @@ def delete_variant(variant_id: int, _admin=Depends(require_admin), db: Session =
     variant = db.get(ProductVariant, variant_id)
     if variant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+    _get_product_or_404(db, variant.product_id, _admin, include_global=False)
     db.delete(variant)
     db.commit()
 
@@ -258,16 +304,23 @@ def delete_variant(variant_id: int, _admin=Depends(require_admin), db: Session =
 
 
 @router.get("/metadata/categories", response_model=list[CategoryResponse], summary="Categorías")
-def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).all()
+def get_categories(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_catalog_context),
+):
+    query = scope_to_empresa(db.query(Category), Category, current_user, include_global=not isinstance(current_user, PublicStorefront))
+    categories = query.all()
     for category in categories:
-        category.products_count = len(category.products)
+        products = _visible_products(db.query(Product), current_user).filter(Product.category_id == category.id)
+        if isinstance(current_user, PublicStorefront):
+            products = products.filter(Product.is_active.is_(True))
+        category.products_count = products.count()
     return categories
 
 
 @router.get("/metadata/seasons", response_model=list[SeasonResponse], summary="Temporadas")
-def get_seasons(db: Session = Depends(get_db)):
-    return db.query(Season).order_by(Season.name).all()
+def get_seasons(db: Session = Depends(get_db), current_user=Depends(get_optional_current_user)):
+    return scope_to_empresa(db.query(Season), Season, current_user).order_by(Season.name).all()
 
 
 @router.get("/metadata/sizes", response_model=list[SizeResponse], summary="Tallas")
@@ -281,13 +334,17 @@ def get_colors(db: Session = Depends(get_db)):
 
 
 @router.get("/metadata/providers", response_model=list[ProviderResponse], summary="Proveedores")
-def get_providers(db: Session = Depends(get_db)):
-    return db.query(Provider).order_by(Provider.name).all()
+def get_providers(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_optional_current_user),
+):
+    query = scope_to_empresa(db.query(Provider), Provider, current_user)
+    return query.order_by(Provider.name).all()
 
 
 @router.get("/metadata/collections", response_model=list[CollectionResponse], summary="Colecciones")
-def get_collections(db: Session = Depends(get_db)):
-    return db.query(Collection).order_by(Collection.name).all()
+def get_collections(db: Session = Depends(get_db), current_user=Depends(get_optional_current_user)):
+    return scope_to_empresa(db.query(Collection), Collection, current_user).order_by(Collection.name).all()
 
 
 # ======================================================================
@@ -302,7 +359,7 @@ def get_collections(db: Session = Depends(get_db)):
     summary="Crear categoría (admin)",
 )
 def create_category(payload: CategoryCreate, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    category = Category(**payload.model_dump())
+    category = Category(**payload.model_dump(), empresa_id=_admin.empresa_id)
     db.add(category)
     db.commit()
     db.refresh(category)
@@ -316,9 +373,11 @@ def create_category(payload: CategoryCreate, _admin=Depends(require_admin), db: 
     summary="Crear temporada (admin)",
 )
 def create_season(payload: SeasonCreate, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    season = Season(**payload.model_dump())
+    if db.query(Season).filter(Season.empresa_id == _admin.empresa_id, Season.name == payload.name).first():
+        raise HTTPException(409, "Ya existe una temporada con ese nombre en tu empresa")
+    season = Season(**payload.model_dump(), empresa_id=_admin.empresa_id)
     db.add(season)
-    db.commit()
+    _commit_catalog(db)
     db.refresh(season)
     return season
 
@@ -358,7 +417,9 @@ def create_color(payload: ColorCreate, _admin=Depends(require_admin), db: Sessio
     summary="Crear proveedor (admin)",
 )
 def create_provider(payload: ProviderCreate, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    provider = Provider(**payload.model_dump())
+    if payload.nit and db.query(Provider).filter(Provider.empresa_id == _admin.empresa_id, Provider.nit == payload.nit).first():
+        raise HTTPException(409, "Ya existe un proveedor con ese NIT en tu empresa")
+    provider = Provider(**payload.model_dump(), empresa_id=_admin.empresa_id)
     db.add(provider)
     try:
         db.commit()
@@ -381,6 +442,14 @@ def _get_model_or_404(db: Session, model, model_id: int, label: str):
     return obj
 
 
+def _commit_catalog(db):
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Ya existe un registro con ese nombre o identificador en tu empresa")
+
+
 @router.patch(
     "/catalog/seasons/{season_id}",
     response_model=SeasonResponse,
@@ -393,9 +462,10 @@ def update_season(
     db: Session = Depends(get_db),
 ):
     season = _get_model_or_404(db, Season, season_id, "Temporada")
+    ensure_tenant_owns(season, _admin, include_global=False, label="Temporada")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(season, field, value)
-    db.commit()
+    _commit_catalog(db)
     db.refresh(season)
     return season
 
@@ -407,6 +477,7 @@ def update_season(
 )
 def delete_season(season_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
     season = _get_model_or_404(db, Season, season_id, "Temporada")
+    ensure_tenant_owns(season, _admin, include_global=False, label="Temporada")
     season.is_active = False
     db.commit()
 
@@ -422,11 +493,14 @@ def create_collection(
     _admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    if db.query(Collection).filter(Collection.empresa_id == _admin.empresa_id, Collection.name == payload.name).first():
+        raise HTTPException(409, "Ya existe una colección con ese nombre en tu empresa")
     if payload.season_id and not db.get(Season, payload.season_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Temporada inválida")
-    collection = Collection(**payload.model_dump())
+    _validate_references(db, {"season_id": payload.season_id}, _admin)
+    collection = Collection(**payload.model_dump(), empresa_id=_admin.empresa_id)
     db.add(collection)
-    db.commit()
+    _commit_catalog(db)
     db.refresh(collection)
     return collection
 
@@ -443,12 +517,14 @@ def update_collection(
     db: Session = Depends(get_db),
 ):
     collection = _get_model_or_404(db, Collection, collection_id, "Colección")
+    ensure_tenant_owns(collection, _admin, include_global=False, label="Colección")
     data = payload.model_dump(exclude_unset=True)
+    _validate_references(db, {"season_id": data.get("season_id")}, _admin)
     if data.get("season_id") and not db.get(Season, data["season_id"]):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Temporada inválida")
     for field, value in data.items():
         setattr(collection, field, value)
-    db.commit()
+    _commit_catalog(db)
     db.refresh(collection)
     return collection
 
@@ -460,6 +536,7 @@ def update_collection(
 )
 def delete_collection(collection_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
     collection = _get_model_or_404(db, Collection, collection_id, "Colección")
+    ensure_tenant_owns(collection, _admin, include_global=False, label="Colección")
     collection.is_active = False
     db.commit()
 
@@ -476,6 +553,10 @@ def update_provider(
     db: Session = Depends(get_db),
 ):
     provider = _get_model_or_404(db, Provider, provider_id, "Proveedor")
+    ensure_tenant_owns(provider, _admin, include_global=False, label="Proveedor")
+    if payload.nit and db.query(Provider).filter(Provider.empresa_id == _admin.empresa_id,
+            Provider.nit == payload.nit, Provider.id != provider.id).first():
+        raise HTTPException(409, "Ya existe un proveedor con ese NIT en tu empresa")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(provider, field, value)
     try:
@@ -494,5 +575,6 @@ def update_provider(
 )
 def delete_provider(provider_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
     provider = _get_model_or_404(db, Provider, provider_id, "Proveedor")
+    ensure_tenant_owns(provider, _admin, include_global=False, label="Proveedor")
     provider.is_active = False
     db.commit()

@@ -1,4 +1,6 @@
+const runtime = globalThis as typeof globalThis & { __FASHIONSTORE_CONFIG__?: { apiUrl?: string } };
+
 export const environment = {
   production: true,
-  apiUrl: 'https://api-production-a70b.up.railway.app/api',
+  apiUrl: runtime.__FASHIONSTORE_CONFIG__?.apiUrl || '/api',
 };

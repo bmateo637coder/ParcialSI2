@@ -1,0 +1,37 @@
+{
+  "resultado": "OK",
+  "entorno": "API COM real de Enterprise Architect 17.2 Trial y JScript de Windows. Generacion, repeticion sin duplicados, ajuste de presentacion y exportacion nativa.",
+  "referencia_organizacion": "2doParcial.qea",
+  "casos": 16,
+  "diagramas_por_tipo": {
+    "Analysis": 16,
+    "Logical": 35,
+    "Package": 1,
+    "Sequence": 32,
+    "Use Case": 5
+  },
+  "modelo": {
+    "paquetes": 66,
+    "elementos": 505,
+    "conectores": 807,
+    "diagramas": 89
+  },
+  "imagenes": 68,
+  "clases_individuales": 16,
+  "proyecto": "FashionStore_Parcial2_Ordenado.qea",
+  "sha256_script": "695107f5921bd28099e385354558a9105f82989f2a20af5ec5b479b57335fd52",
+  "comprobaciones": [
+    "integridad SQLite",
+    "cuatro diagramas directamente visibles por CU",
+    "secuencias y clases con ParentID=0",
+    "robustez, secuencias y clases individuales CU1-CU16",
+    "etiquetas sin alias internos de participantes",
+    "clases en notacion rectangular",
+    "notas fuera de las cabeceras de secuencia",
+    "diagramas no vacios",
+    "extremos de relaciones existentes",
+    "sin ubicaciones duplicadas",
+    "PNG nativos por cada CU",
+    "repeticion nativa sin duplicados"
+  ]
+}

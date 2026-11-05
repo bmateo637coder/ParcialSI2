@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_business_user as get_current_user
 from app.models.branch import Branch
 from app.models.catalog import Category, Product, ProductVariant
 from app.models.commerce import Order, OrderItem, Reservation, ReservationItem
@@ -89,13 +89,15 @@ def _default_range() -> tuple[date, date]:
 
 
 def _sales_orders_query(db: Session, date_from: date, date_to: date,
-                        branch_id: Optional[int], category_id: Optional[int]):
+                        branch_id: Optional[int], category_id: Optional[int],
+                        empresa_id: Optional[int] = None):
     """Query base: pedidos de venta (confirmados) con filtros aplicados."""
     query = db.query(Order).filter(
         Order.status.in_(_SALE_STATUSES),
         func.date(Order.created_at) >= date_from.isoformat(),
         func.date(Order.created_at) <= date_to.isoformat(),
     )
+    query = query.filter(Order.empresa_id == empresa_id)
     if branch_id is not None:
         query = query.filter(Order.branch_id == branch_id)
     if category_id is not None:
@@ -106,10 +108,14 @@ def _sales_orders_query(db: Session, date_from: date, date_to: date,
     return query
 
 
-def _count_active_promotions(db: Session) -> int:
+def _count_active_promotions(db: Session, empresa_id: Optional[int] = None) -> int:
     """Promociones habilitadas y dentro de su ventana de fechas (hoy inclusive)."""
     today = _utc_today()
-    promos = db.query(Promotion).filter(Promotion.is_active == True).all()  # noqa: E712
+    query = db.query(Promotion).filter(Promotion.is_active == True)  # noqa: E712
+    from sqlalchemy import or_
+    query = query.filter(or_(Promotion.empresa_id == empresa_id,
+                             Promotion.empresa_id.is_(None)))
+    promos = query.all()
     return sum(
         1 for p in promos
         if (p.start_date is None or p.start_date <= today)
@@ -119,18 +125,24 @@ def _count_active_promotions(db: Session) -> int:
 
 def _build_dashboard(db: Session, date_from: date, date_to: date,
                      branch_id: Optional[int], category_id: Optional[int],
-                     narrative: bool = False, report_type: Optional[str] = None) -> DashboardReport:
-    orders = _sales_orders_query(db, date_from, date_to, branch_id, category_id).all()
-
-    total_sales = round(sum(o.total for o in orders), 2)
-    total_orders = len(orders)
+                     narrative: bool = False, report_type: Optional[str] = None,
+                     empresa_id: Optional[int] = None) -> DashboardReport:
+    from collections import defaultdict
+    from decimal import Decimal
+    from app.services.financial_reporting import financial_events, pending_refunds, summary
+    events = financial_events(db, empresa_id, date_from, date_to, branch_id, category_id)
+    amounts = summary(events)
+    total_sales, total_orders = amounts['total_sales'], amounts['total_orders']
     avg_order = round(total_sales / total_orders, 2) if total_orders else 0.0
-    discount_amount = round(sum(it.discount or 0.0 for o in orders for it in o.items), 2)
+    discount_amount = float(sum((event['discount'] for event in events), Decimal('0.00')))
 
     reservations_query = db.query(Reservation).filter(
         func.date(Reservation.reservation_date) >= date_from.isoformat(),
         func.date(Reservation.reservation_date) <= date_to.isoformat(),
     )
+    reservations_query = reservations_query.join(
+        Branch, Reservation.branch_id == Branch.id
+    ).filter(Branch.empresa_id == empresa_id)
     if branch_id is not None:
         reservations_query = reservations_query.filter(Reservation.branch_id == branch_id)
     if category_id is not None:
@@ -143,6 +155,7 @@ def _build_dashboard(db: Session, date_from: date, date_to: date,
 
     # Inventario es estado actual: no aplica el periodo, solo sucursal/categoría.
     inv_query = db.query(Inventory).join(ProductVariant, Inventory.variant_id == ProductVariant.id)
+    inv_query = inv_query.join(Branch, Inventory.branch_id == Branch.id)             .filter(Branch.empresa_id == empresa_id)
     if branch_id is not None:
         inv_query = inv_query.filter(Inventory.branch_id == branch_id)
     if category_id is not None:
@@ -153,73 +166,23 @@ def _build_dashboard(db: Session, date_from: date, date_to: date,
     total_units_available = sum(r.available for r in inv_rows)
     low_stock_variants = sum(1 for r in inv_rows if r.available <= _LOW_STOCK_THRESHOLD)
 
-    empty = total_orders == 0 and reservations == 0
-
-    # Serie diaria de ventas para el gráfico.
-    series_query = (
-        db.query(func.date(Order.created_at).label("d"), func.sum(Order.total), func.count(Order.id))
-        .filter(Order.status.in_(_SALE_STATUSES),
-                func.date(Order.created_at) >= date_from.isoformat(),
-                func.date(Order.created_at) <= date_to.isoformat())
-    )
-    if branch_id is not None:
-        series_query = series_query.filter(Order.branch_id == branch_id)
-    if category_id is not None:
-        series_query = series_query.join(Order.items) \
-            .join(ProductVariant, OrderItem.variant_id == ProductVariant.id) \
-            .filter(ProductVariant.product_id.in_(
-                db.query(Product.id).filter(Product.category_id == category_id)
-            ))
-    rows = series_query.group_by("d").order_by("d").all()
-    sales_series = [SalesPoint(date=str(r[0]), amount=round(float(r[1] or 0), 2), orders=int(r[2] or 0)) for r in rows]
-
-    # Ventas por categoría (descontando promociones).
-    by_category_rows = (
-        db.query(Product.category_id,
-                 func.sum(OrderItem.unit_price * OrderItem.quantity - OrderItem.discount),
-                 func.sum(OrderItem.quantity))
-        .join(ProductVariant, OrderItem.variant_id == ProductVariant.id)
-        .join(Product, ProductVariant.product_id == Product.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .filter(Order.status.in_(_SALE_STATUSES),
-                func.date(Order.created_at) >= date_from.isoformat(),
-                func.date(Order.created_at) <= date_to.isoformat())
-    )
-    if branch_id is not None:
-        by_category_rows = by_category_rows.filter(Order.branch_id == branch_id)
-    if category_id is not None:
-        by_category_rows = by_category_rows.filter(Product.category_id == category_id)
-    by_category = []
-    for cat_id, sales_total, units in by_category_rows.group_by(Product.category_id).all():
-        cat = db.get(Category, cat_id) if cat_id else None
-        by_category.append(CategoryReport(
-            category_id=cat_id,
-            category_name=cat.name if cat else "Sin categoría",
-            sales=round(float(sales_total or 0), 2),
-            units=int(units or 0),
-        ))
-
-    # Top 5 prendas por ingresos (descontando promociones).
-    top_rows = (
-        db.query(Product.id, Product.name,
-                 func.sum(OrderItem.quantity),
-                 func.sum(OrderItem.unit_price * OrderItem.quantity - OrderItem.discount))
-        .join(ProductVariant, OrderItem.variant_id == ProductVariant.id)
-        .join(Product, ProductVariant.product_id == Product.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .filter(Order.status.in_(_SALE_STATUSES),
-                func.date(Order.created_at) >= date_from.isoformat(),
-                func.date(Order.created_at) <= date_to.isoformat())
-    )
-    if branch_id is not None:
-        top_rows = top_rows.filter(Order.branch_id == branch_id)
-    if category_id is not None:
-        top_rows = top_rows.filter(Product.category_id == category_id)
-    top_products = [
-        TopProductReport(product_id=pid, name=name, units=int(units or 0), revenue=round(float(rev or 0), 2))
-        for pid, name, units, rev in top_rows.group_by(Product.id, Product.name)
-        .order_by(func.sum(OrderItem.unit_price * OrderItem.quantity - OrderItem.discount).desc()).limit(5).all()
-    ]
+    pending = float(pending_refunds(db, empresa_id, date_from, date_to, branch_id, category_id))
+    empty = not events and reservations == 0 and pending == 0
+    daily = defaultdict(lambda: {'amount': Decimal('0.00'), 'orders': set()})
+    categories, products = {}, {}
+    for event in events:
+        day = daily[event['date']]
+        day['amount'] += event['amount']
+        if event['type'] == 'COBRO': day['orders'].add(event['order_id'])
+        category = categories.setdefault(event['category_id'], {'name':event['category_name'], 'amount':Decimal('0.00'), 'units':0})
+        category['amount'] += event['amount']; category['units'] += event['quantity']
+        if event['product_id'] is not None:
+            product = products.setdefault(event['product_id'], {'name':event['product_name'], 'amount':Decimal('0.00'), 'units':0})
+            product['amount'] += event['amount']; product['units'] += event['quantity']
+    sales_series = [SalesPoint(date=day, amount=float(data['amount']), orders=len(data['orders'])) for day,data in sorted(daily.items())]
+    by_category = [CategoryReport(category_id=key, category_name=data['name'], sales=float(data['amount']), units=data['units']) for key,data in categories.items()]
+    top_products = [TopProductReport(product_id=key,name=data['name'],units=data['units'],revenue=float(data['amount']))
+        for key,data in sorted(products.items(),key=lambda pair:pair[1]['amount'],reverse=True)[:5]]
 
     effective_narrative = _generate_narrative(
         db, report_type=report_type,
@@ -228,7 +191,7 @@ def _build_dashboard(db: Session, date_from: date, date_to: date,
         total_units_available=total_units_available,
         low_stock_variants=low_stock_variants,
         discount_amount=discount_amount,
-        active_promotions=_count_active_promotions(db),
+        active_promotions=_count_active_promotions(db, empresa_id),
     ) if narrative else None
 
     return DashboardReport(
@@ -236,13 +199,16 @@ def _build_dashboard(db: Session, date_from: date, date_to: date,
         date_from=date_from.isoformat(),
         date_to=date_to.isoformat(),
         kpis=ReportKpis(
+            gross_sales=amounts["gross_sales"],
+            refund_amount=amounts["refund_amount"],
+            refund_pending=pending,
             total_sales=total_sales,
             total_orders=total_orders,
             avg_order=avg_order,
             reservations=reservations,
             total_units_available=total_units_available,
             low_stock_variants=low_stock_variants,
-            active_promotions=_count_active_promotions(db),
+            active_promotions=_count_active_promotions(db, empresa_id),
             discount_amount=discount_amount,
         ),
         sales_series=sales_series,
@@ -274,7 +240,8 @@ def get_dashboard(
     if date_from > date_to:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail="desde no puede ser posterior a hasta")
-    return _build_dashboard(db, date_from, date_to, branch_id, category_id)
+    return _build_dashboard(db, date_from, date_to, branch_id, category_id,
+                            empresa_id=user.empresa_id)
 
 
 # ======================================================================
@@ -361,7 +328,8 @@ def _detect_period(command: str) -> tuple[Optional[date], Optional[date]]:
     return None, None
 
 
-def _resolve_voice(db: Session, command: str) -> VoiceReportResponse:
+def _resolve_voice(db: Session, command: str,
+                   empresa_id: Optional[int] = None) -> VoiceReportResponse:
     normalized = _normalize(command)
     words = set(normalized.split())
 
@@ -386,21 +354,26 @@ def _resolve_voice(db: Session, command: str) -> VoiceReportResponse:
 
     # Sucursal por coincidencia de nombre.
     branch_id: Optional[int] = None
-    for branch in db.query(Branch).filter(Branch.is_active == True).all():  # noqa: E712
+    branches_query = db.query(Branch).filter(Branch.is_active == True)  # noqa: E712
+    branches_query = branches_query.filter(Branch.empresa_id == empresa_id)
+    for branch in branches_query.all():
         if _normalize(branch.name) and _normalize(branch.name) in normalized:
             branch_id = branch.id
             break
 
     # Categoría por coincidencia de nombre.
     category_id: Optional[int] = None
-    for category in db.query(Category).all():
+    categories_query = db.query(Category)
+    categories_query = categories_query.filter(Category.empresa_id == empresa_id)
+    for category in categories_query.all():
         if _normalize(category.name) and _normalize(category.name) in normalized:
             category_id = category.id
             break
 
     data = _build_dashboard(db, date_from or _default_range()[0],
                             date_to or _default_range()[1], branch_id, category_id,
-                            narrative=True, report_type=report_type)
+                            narrative=True, report_type=report_type,
+                            empresa_id=empresa_id)
 
     message = f"Reporte de {report_type.lower()} generado con éxito."
     return VoiceReportResponse(
@@ -422,4 +395,4 @@ def _resolve_voice(db: Session, command: str) -> VoiceReportResponse:
 def voice_report(payload: VoiceCommand, user: User = Depends(get_current_user),
                  db: Session = Depends(get_db)):
     _require_reports(user)
-    return _resolve_voice(db, payload.command)
+    return _resolve_voice(db, payload.command, empresa_id=user.empresa_id)

@@ -1,0 +1,49 @@
+{
+  "resultado": "OK",
+  "entorno": "Enterprise Architect 17.2 Trial, API COM real desde JScript de Windows sobre copia temporal de EABase.qea.",
+  "sha256_script": "82e31a05febd5a536b482440c7afcd0b474ad57435cd8464227be63278a118d2",
+  "casos": 16,
+  "diagramas_por_tipo": {
+    "Analysis": 16,
+    "Logical": 20,
+    "Sequence": 32,
+    "Use Case": 5
+  },
+  "modelo": {
+    "paquetes": 65,
+    "elementos": 503,
+    "conectores": 683,
+    "diagramas": 73
+  },
+  "comprobaciones": [
+    "ejecucion completa en API real de EA",
+    "Model Root con Element=null",
+    "73 diagramas no vacios",
+    "numeracion CU1-CU16",
+    "conectores con extremos existentes",
+    "enlaces visibles con extremos en el diagrama",
+    "sin posiciones duplicadas",
+    "secuencias asociadas al CU y mensajes ordenados"
+  ],
+  "proyecto_generado": "FashionStore_CU1_CU16.qea",
+  "log": [
+    "COM_CREATED",
+    "OPEN_OK",
+    "ROOT Model element=null",
+    "Iniciando FashionStore UML 2.5.1. No cierres EA hasta el resumen final.",
+    "Entidades y atributos de implementación preparados: 36.",
+    "Referencias de diseño preparadas hasta CU10.",
+    "Referencias de diseño preparadas hasta CU16.",
+    "Casos de uso generales y por paquete: listos.",
+    "Diagrama de paquetes: listo.",
+    "Modelo de dominio y vistas por paquete: listos.",
+    "Procesado CU5: Preparar dispositivo para uso offline",
+    "Procesado CU10: Sincronizar operaciones pendientes",
+    "Procesado CU15: Consultar dashboard analítico",
+    "Procesado CU16: Entrenar y evaluar modelos de ML",
+    "Clases generales, por paquete y por capas: listas.",
+    "TERMINADO. Nuevos paquetes=64, elementos=439, diagramas=73, conectores=683.",
+    "En una repetición los contadores de nuevos objetos deben ser cero. Consulta las notas de cada CU y de la cabecera para las diferencias entre documento e implementación.",
+    "REAL_EA_VALIDATION_OK"
+  ]
+}

@@ -20,6 +20,7 @@ List<String> _listStrings(Map<String, dynamic> json, String key) {
 
 class User {
   final int id;
+  final int? empresaId;
   final String firstName;
   final String lastName;
   final String email;
@@ -30,6 +31,7 @@ class User {
 
   User({
     required this.id,
+    this.empresaId,
     required this.firstName,
     required this.lastName,
     required this.email,
@@ -40,26 +42,28 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> j) => User(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        firstName: _g<String>(j, 'first_name', '') ?? '',
-        lastName: _g<String>(j, 'last_name', '') ?? '',
-        email: _g<String>(j, 'email', '') ?? '',
-        roleName: _g<String>(j, 'role_name', '') ?? '',
-        isActive: _g<bool>(j, 'is_active', true) ?? true,
-        phone: _g<String>(j, 'phone'),
-        createdAt: _g<String>(j, 'created_at'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    empresaId: _g<int>(j, 'empresa_id'),
+    firstName: _g<String>(j, 'first_name', '') ?? '',
+    lastName: _g<String>(j, 'last_name', '') ?? '',
+    email: _g<String>(j, 'email', '') ?? '',
+    roleName: _g<String>(j, 'role_name', '') ?? '',
+    isActive: _g<bool>(j, 'is_active', true) ?? true,
+    phone: _g<String>(j, 'phone'),
+    createdAt: _g<String>(j, 'created_at'),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'first_name': firstName,
-        'last_name': lastName,
-        'email': email,
-        'role_name': roleName,
-        'is_active': isActive,
-        'phone': phone,
-        'created_at': createdAt,
-      };
+    'id': id,
+    'empresa_id': empresaId,
+    'first_name': firstName,
+    'last_name': lastName,
+    'email': email,
+    'role_name': roleName,
+    'is_active': isActive,
+    'phone': phone,
+    'created_at': createdAt,
+  };
 
   String get fullName => '$firstName $lastName'.trim();
 }
@@ -82,22 +86,22 @@ class Branch {
   });
 
   factory Branch.fromJson(Map<String, dynamic> j) => Branch(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        city: _g<String>(j, 'city', '') ?? '',
-        address: _g<String>(j, 'address'),
-        phone: _g<String>(j, 'phone'),
-        isActive: _g<bool>(j, 'is_active', true) ?? true,
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    city: _g<String>(j, 'city', '') ?? '',
+    address: _g<String>(j, 'address'),
+    phone: _g<String>(j, 'phone'),
+    isActive: _g<bool>(j, 'is_active', true) ?? true,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'city': city,
-        'address': address,
-        'phone': phone,
-        'is_active': isActive,
-      };
+    'id': id,
+    'name': name,
+    'city': city,
+    'address': address,
+    'phone': phone,
+    'is_active': isActive,
+  };
 }
 
 class IdName {
@@ -106,8 +110,10 @@ class IdName {
 
   IdName({required this.id, required this.name});
 
-  factory IdName.fromJson(Map<String, dynamic> j) =>
-      IdName(id: _g<int>(j, 'id', 0) ?? 0, name: _g<String>(j, 'name', '') ?? '');
+  factory IdName.fromJson(Map<String, dynamic> j) => IdName(
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+  );
 }
 
 class CategoryItem extends IdName {
@@ -116,10 +122,10 @@ class CategoryItem extends IdName {
   CategoryItem({required super.id, required super.name, this.productsCount});
 
   factory CategoryItem.fromJson(Map<String, dynamic> j) => CategoryItem(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        productsCount: _g<int>(j, 'products_count'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    productsCount: _g<int>(j, 'products_count'),
+  );
 }
 
 class Product {
@@ -148,23 +154,23 @@ class Product {
   });
 
   factory Product.fromJson(Map<String, dynamic> j) => Product(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        description: _g<String>(j, 'description'),
-        basePrice: _num(j, 'base_price'),
-        imageUrl: _g<String>(j, 'image_url'),
-        category: j['category'] is Map
-            ? IdName.fromJson(j['category'] as Map<String, dynamic>)
-            : null,
-        season: j['season'] is Map
-            ? IdName.fromJson(j['season'] as Map<String, dynamic>)
-            : null,
-        provider: j['provider'] is Map
-            ? IdName.fromJson(j['provider'] as Map<String, dynamic>)
-            : null,
-        providerId: _g<int>(j, 'provider_id'),
-        isActive: _g<bool>(j, 'is_active', true) ?? true,
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    description: _g<String>(j, 'description'),
+    basePrice: _num(j, 'base_price'),
+    imageUrl: _g<String>(j, 'image_url'),
+    category: j['category'] is Map
+        ? IdName.fromJson(j['category'] as Map<String, dynamic>)
+        : null,
+    season: j['season'] is Map
+        ? IdName.fromJson(j['season'] as Map<String, dynamic>)
+        : null,
+    provider: j['provider'] is Map
+        ? IdName.fromJson(j['provider'] as Map<String, dynamic>)
+        : null,
+    providerId: _g<int>(j, 'provider_id'),
+    isActive: _g<bool>(j, 'is_active', true) ?? true,
+  );
 }
 
 class ProductVariant {
@@ -193,19 +199,19 @@ class ProductVariant {
   });
 
   factory ProductVariant.fromJson(Map<String, dynamic> j) => ProductVariant(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        productId: _g<int>(j, 'product_id', 0) ?? 0,
-        sizeId: _g<int>(j, 'size_id'),
-        colorId: _g<int>(j, 'color_id'),
-        sizeName: _g<String>(j, 'size_name'),
-        colorName: _g<String>(j, 'color_name'),
-        sku: _g<String>(j, 'sku', '') ?? '',
-        stock: _g<int>(j, 'stock', 0) ?? 0,
-        price: j['price'] is num ? (j['price'] as num).toDouble() : null,
-        effectivePrice: j['effective_price'] is num
-            ? (j['effective_price'] as num).toDouble()
-            : null,
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    productId: _g<int>(j, 'product_id', 0) ?? 0,
+    sizeId: _g<int>(j, 'size_id'),
+    colorId: _g<int>(j, 'color_id'),
+    sizeName: _g<String>(j, 'size_name'),
+    colorName: _g<String>(j, 'color_name'),
+    sku: _g<String>(j, 'sku', '') ?? '',
+    stock: _g<int>(j, 'stock', 0) ?? 0,
+    price: j['price'] is num ? (j['price'] as num).toDouble() : null,
+    effectivePrice: j['effective_price'] is num
+        ? (j['effective_price'] as num).toDouble()
+        : null,
+  );
 
   String get label =>
       '${sizeName ?? 'N/D'} / ${colorName ?? 'N/D'} · ${sku.isEmpty ? '' : sku}';
@@ -241,19 +247,19 @@ class AvailabilityItem {
   });
 
   factory AvailabilityItem.fromJson(Map<String, dynamic> j) => AvailabilityItem(
-        variantId: _g<int>(j, 'variant_id', 0) ?? 0,
-        productId: _g<int>(j, 'product_id', 0) ?? 0,
-        productName: _g<String>(j, 'product_name', '') ?? '',
-        imageUrl: _g<String>(j, 'image_url'),
-        sizeName: _g<String>(j, 'size_name'),
-        colorName: _g<String>(j, 'color_name'),
-        sku: _g<String>(j, 'sku'),
-        branchId: _g<int>(j, 'branch_id'),
-        branchName: _g<String>(j, 'branch_name'),
-        city: _g<String>(j, 'city'),
-        available: _g<int>(j, 'available', 0) ?? 0,
-        price: j['price'] is num ? (j['price'] as num).toDouble() : null,
-      );
+    variantId: _g<int>(j, 'variant_id', 0) ?? 0,
+    productId: _g<int>(j, 'product_id', 0) ?? 0,
+    productName: _g<String>(j, 'product_name', '') ?? '',
+    imageUrl: _g<String>(j, 'image_url'),
+    sizeName: _g<String>(j, 'size_name'),
+    colorName: _g<String>(j, 'color_name'),
+    sku: _g<String>(j, 'sku'),
+    branchId: _g<int>(j, 'branch_id'),
+    branchName: _g<String>(j, 'branch_name'),
+    city: _g<String>(j, 'city'),
+    available: _g<int>(j, 'available', 0) ?? 0,
+    price: j['price'] is num ? (j['price'] as num).toDouble() : null,
+  );
 }
 
 class CartItem {
@@ -286,19 +292,19 @@ class CartItem {
   });
 
   factory CartItem.fromJson(Map<String, dynamic> j) => CartItem(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        variantId: _g<int>(j, 'variant_id', 0) ?? 0,
-        quantity: _g<int>(j, 'quantity', 0) ?? 0,
-        productId: _g<int>(j, 'product_id'),
-        productName: _g<String>(j, 'product_name'),
-        imageUrl: _g<String>(j, 'image_url'),
-        sizeName: _g<String>(j, 'size_name'),
-        colorName: _g<String>(j, 'color_name'),
-        sku: _g<String>(j, 'sku'),
-        unitPrice: _num(j, 'unit_price'),
-        discount: _num(j, 'discount'),
-        subtotal: _num(j, 'subtotal'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    variantId: _g<int>(j, 'variant_id', 0) ?? 0,
+    quantity: _g<int>(j, 'quantity', 0) ?? 0,
+    productId: _g<int>(j, 'product_id'),
+    productName: _g<String>(j, 'product_name'),
+    imageUrl: _g<String>(j, 'image_url'),
+    sizeName: _g<String>(j, 'size_name'),
+    colorName: _g<String>(j, 'color_name'),
+    sku: _g<String>(j, 'sku'),
+    unitPrice: _num(j, 'unit_price'),
+    discount: _num(j, 'discount'),
+    subtotal: _num(j, 'subtotal'),
+  );
 }
 
 class CartSummary {
@@ -359,18 +365,18 @@ class ReservationItem {
   });
 
   factory ReservationItem.fromJson(Map<String, dynamic> j) => ReservationItem(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        variantId: _g<int>(j, 'variant_id', 0) ?? 0,
-        quantity: _g<int>(j, 'quantity', 0) ?? 0,
-        unitPrice: _num(j, 'unit_price'),
-        subtotal: _num(j, 'subtotal'),
-        productId: _g<int>(j, 'product_id'),
-        productName: _g<String>(j, 'product_name'),
-        imageUrl: _g<String>(j, 'image_url'),
-        sizeName: _g<String>(j, 'size_name'),
-        colorName: _g<String>(j, 'color_name'),
-        sku: _g<String>(j, 'sku'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    variantId: _g<int>(j, 'variant_id', 0) ?? 0,
+    quantity: _g<int>(j, 'quantity', 0) ?? 0,
+    unitPrice: _num(j, 'unit_price'),
+    subtotal: _num(j, 'subtotal'),
+    productId: _g<int>(j, 'product_id'),
+    productName: _g<String>(j, 'product_name'),
+    imageUrl: _g<String>(j, 'image_url'),
+    sizeName: _g<String>(j, 'size_name'),
+    colorName: _g<String>(j, 'color_name'),
+    sku: _g<String>(j, 'sku'),
+  );
 }
 
 class Reservation {
@@ -461,22 +467,24 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> j) => OrderItem(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        variantId: _g<int>(j, 'variant_id', 0) ?? 0,
-        quantity: _g<int>(j, 'quantity', 0) ?? 0,
-        unitPrice: _num(j, 'unit_price'),
-        discount: _num(j, 'discount'),
-        subtotal: _num(j, 'subtotal'),
-        productId: _g<int>(j, 'product_id'),
-        productName: _g<String>(j, 'product_name'),
-        imageUrl: _g<String>(j, 'image_url'),
-        sizeName: _g<String>(j, 'size_name'),
-        colorName: _g<String>(j, 'color_name'),
-        sku: _g<String>(j, 'sku'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    variantId: _g<int>(j, 'variant_id', 0) ?? 0,
+    quantity: _g<int>(j, 'quantity', 0) ?? 0,
+    unitPrice: _num(j, 'unit_price'),
+    discount: _num(j, 'discount'),
+    subtotal: _num(j, 'subtotal'),
+    productId: _g<int>(j, 'product_id'),
+    productName: _g<String>(j, 'product_name'),
+    imageUrl: _g<String>(j, 'image_url'),
+    sizeName: _g<String>(j, 'size_name'),
+    colorName: _g<String>(j, 'color_name'),
+    sku: _g<String>(j, 'sku'),
+  );
 }
 
 class PaymentBrief {
+  final double? cashReceived;
+  final double changeAmount;
   final int id;
   final String method;
   final double amount;
@@ -486,6 +494,8 @@ class PaymentBrief {
   final String? paidAt;
 
   PaymentBrief({
+    this.cashReceived,
+    this.changeAmount = 0,
     required this.id,
     this.method = '',
     this.amount = 0,
@@ -496,17 +506,26 @@ class PaymentBrief {
   });
 
   factory PaymentBrief.fromJson(Map<String, dynamic> j) => PaymentBrief(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        method: _g<String>(j, 'method', '') ?? '',
-        amount: _num(j, 'amount'),
-        status: _g<String>(j, 'status', '') ?? '',
-        stripePaymentId: _g<String>(j, 'stripe_payment_id'),
-        createdAt: _g<String>(j, 'created_at'),
-        paidAt: _g<String>(j, 'paid_at'),
-      );
+    cashReceived: j['cash_received'] == null ? null : _num(j, 'cash_received'),
+    changeAmount: _num(j, 'change_amount'),
+    id: _g<int>(j, 'id', 0) ?? 0,
+    method: _g<String>(j, 'method', '') ?? '',
+    amount: _num(j, 'amount'),
+    status: _g<String>(j, 'status', '') ?? '',
+    stripePaymentId: _g<String>(j, 'stripe_payment_id'),
+    createdAt: _g<String>(j, 'created_at'),
+    paidAt: _g<String>(j, 'paid_at'),
+  );
 }
 
 class Order {
+  final double collectedTotal;
+  final double refundedTotal;
+  final double refundPending;
+  final double netTotal;
+  final bool stockDeducted;
+  final List<Map<String, dynamic>> refunds;
+  final List<Map<String, dynamic>> returnableItems;
   final int id;
   final int clientId;
   final String? clientName;
@@ -522,6 +541,13 @@ class Order {
   final PaymentBrief? payment;
 
   Order({
+    this.collectedTotal = 0,
+    this.refundedTotal = 0,
+    this.refundPending = 0,
+    this.netTotal = 0,
+    this.stockDeducted = false,
+    this.refunds = const [],
+    this.returnableItems = const [],
     required this.id,
     required this.clientId,
     this.clientName,
@@ -547,6 +573,17 @@ class Order {
           .toList();
     }
     return Order(
+      collectedTotal: _num(j, 'collected_total'),
+      refundedTotal: _num(j, 'refunded_total'),
+      refundPending: _num(j, 'refund_pending'),
+      netTotal: _num(j, 'net_total'),
+      stockDeducted: j['stock_deducted'] == true,
+      refunds: (j['refunds'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+      returnableItems: (j['returnable_items'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
       id: _g<int>(j, 'id', 0) ?? 0,
       clientId: _g<int>(j, 'client_id', 0) ?? 0,
       clientName: _g<String>(j, 'client_name'),
@@ -586,14 +623,14 @@ class RecommendedItem {
   });
 
   factory RecommendedItem.fromJson(Map<String, dynamic> j) => RecommendedItem(
-        productId: _g<int>(j, 'product_id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        category: _g<String>(j, 'category', '') ?? '',
-        basePrice: _num(j, 'base_price'),
-        inStock: _g<bool>(j, 'in_stock', false) ?? false,
-        reason: _g<String>(j, 'reason', '') ?? '',
-        score: _num(j, 'score'),
-      );
+    productId: _g<int>(j, 'product_id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    category: _g<String>(j, 'category', '') ?? '',
+    basePrice: _num(j, 'base_price'),
+    inStock: _g<bool>(j, 'in_stock', false) ?? false,
+    reason: _g<String>(j, 'reason', '') ?? '',
+    score: _num(j, 'score'),
+  );
 }
 
 class Recommendation {
@@ -626,10 +663,10 @@ class ChatMessage {
   ChatMessage({required this.role, required this.content, this.createdAt});
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
-        role: _g<String>(j, 'role', '') ?? '',
-        content: _g<String>(j, 'content', '') ?? '',
-        createdAt: _g<String>(j, 'created_at'),
-      );
+    role: _g<String>(j, 'role', '') ?? '',
+    content: _g<String>(j, 'content', '') ?? '',
+    createdAt: _g<String>(j, 'created_at'),
+  );
 }
 
 class ChatConversation {
@@ -637,7 +674,11 @@ class ChatConversation {
   final String? createdAt;
   final List<ChatMessage> messages;
 
-  ChatConversation({required this.id, this.createdAt, this.messages = const []});
+  ChatConversation({
+    required this.id,
+    this.createdAt,
+    this.messages = const [],
+  });
 
   factory ChatConversation.fromJson(Map<String, dynamic> j) {
     var messages = <ChatMessage>[];
@@ -661,16 +702,23 @@ class ChatReply {
   final String reply;
   final List<String> suggestions;
 
-  ChatReply({required this.conversationId, this.reply = '', this.suggestions = const []});
+  ChatReply({
+    required this.conversationId,
+    this.reply = '',
+    this.suggestions = const [],
+  });
 
   factory ChatReply.fromJson(Map<String, dynamic> j) => ChatReply(
-        conversationId: _g<int>(j, 'conversation_id', 0) ?? 0,
-        reply: _g<String>(j, 'reply', '') ?? '',
-        suggestions: _listStrings(j, 'suggestions'),
-      );
+    conversationId: _g<int>(j, 'conversation_id', 0) ?? 0,
+    reply: _g<String>(j, 'reply', '') ?? '',
+    suggestions: _listStrings(j, 'suggestions'),
+  );
 }
 
 class ReportKpis {
+  final double grossSales;
+  final double refundAmount;
+  final double refundPending;
   final double totalSales;
   final int totalOrders;
   final double avgOrder;
@@ -681,6 +729,9 @@ class ReportKpis {
   final double discountAmount;
 
   const ReportKpis({
+    this.grossSales = 0,
+    this.refundAmount = 0,
+    this.refundPending = 0,
     this.totalSales = 0,
     this.totalOrders = 0,
     this.avgOrder = 0,
@@ -692,15 +743,18 @@ class ReportKpis {
   });
 
   factory ReportKpis.fromJson(Map<String, dynamic> j) => ReportKpis(
-        totalSales: _num(j, 'total_sales'),
-        totalOrders: _g<int>(j, 'total_orders') ?? 0,
-        avgOrder: _num(j, 'avg_order'),
-        reservations: _g<int>(j, 'reservations') ?? 0,
-        totalUnitsAvailable: _g<int>(j, 'total_units_available') ?? 0,
-        lowStockVariants: _g<int>(j, 'low_stock_variants') ?? 0,
-        activePromotions: _g<int>(j, 'active_promotions') ?? 0,
-        discountAmount: _num(j, 'discount_amount'),
-      );
+    grossSales: _num(j, 'gross_sales'),
+    refundAmount: _num(j, 'refund_amount'),
+    refundPending: _num(j, 'refund_pending'),
+    totalSales: _num(j, 'total_sales'),
+    totalOrders: _g<int>(j, 'total_orders') ?? 0,
+    avgOrder: _num(j, 'avg_order'),
+    reservations: _g<int>(j, 'reservations') ?? 0,
+    totalUnitsAvailable: _g<int>(j, 'total_units_available') ?? 0,
+    lowStockVariants: _g<int>(j, 'low_stock_variants') ?? 0,
+    activePromotions: _g<int>(j, 'active_promotions') ?? 0,
+    discountAmount: _num(j, 'discount_amount'),
+  );
 }
 
 class SalesPoint {
@@ -711,10 +765,10 @@ class SalesPoint {
   SalesPoint({this.date = '', this.amount = 0, this.orders = 0});
 
   factory SalesPoint.fromJson(Map<String, dynamic> j) => SalesPoint(
-        date: _g<String>(j, 'date', '') ?? '',
-        amount: _num(j, 'amount'),
-        orders: _g<int>(j, 'orders', 0) ?? 0,
-      );
+    date: _g<String>(j, 'date', '') ?? '',
+    amount: _num(j, 'amount'),
+    orders: _g<int>(j, 'orders', 0) ?? 0,
+  );
 }
 
 class CategoryReport {
@@ -723,14 +777,19 @@ class CategoryReport {
   final double sales;
   final int units;
 
-  CategoryReport({this.categoryId, this.categoryName = '', this.sales = 0, this.units = 0});
+  CategoryReport({
+    this.categoryId,
+    this.categoryName = '',
+    this.sales = 0,
+    this.units = 0,
+  });
 
   factory CategoryReport.fromJson(Map<String, dynamic> j) => CategoryReport(
-        categoryId: _g<int>(j, 'category_id'),
-        categoryName: _g<String>(j, 'category_name', '') ?? '',
-        sales: _num(j, 'sales'),
-        units: _g<int>(j, 'units', 0) ?? 0,
-      );
+    categoryId: _g<int>(j, 'category_id'),
+    categoryName: _g<String>(j, 'category_name', '') ?? '',
+    sales: _num(j, 'sales'),
+    units: _g<int>(j, 'units', 0) ?? 0,
+  );
 }
 
 class TopProductReport {
@@ -739,14 +798,19 @@ class TopProductReport {
   final int units;
   final double revenue;
 
-  TopProductReport({required this.productId, this.name = '', this.units = 0, this.revenue = 0});
+  TopProductReport({
+    required this.productId,
+    this.name = '',
+    this.units = 0,
+    this.revenue = 0,
+  });
 
   factory TopProductReport.fromJson(Map<String, dynamic> j) => TopProductReport(
-        productId: _g<int>(j, 'product_id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        units: _g<int>(j, 'units', 0) ?? 0,
-        revenue: _num(j, 'revenue'),
-      );
+    productId: _g<int>(j, 'product_id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    units: _g<int>(j, 'units', 0) ?? 0,
+    revenue: _num(j, 'revenue'),
+  );
 }
 
 class DashboardReport {
@@ -828,13 +892,13 @@ class VoiceIntent {
   });
 
   factory VoiceIntent.fromJson(Map<String, dynamic> j) => VoiceIntent(
-        recognized: _g<bool>(j, 'recognized', false) ?? false,
-        reportType: _g<String>(j, 'report_type'),
-        dateFrom: _g<String>(j, 'date_from'),
-        dateTo: _g<String>(j, 'date_to'),
-        branchId: _g<int>(j, 'branch_id'),
-        categoryId: _g<int>(j, 'category_id'),
-      );
+    recognized: _g<bool>(j, 'recognized', false) ?? false,
+    reportType: _g<String>(j, 'report_type'),
+    dateFrom: _g<String>(j, 'date_from'),
+    dateTo: _g<String>(j, 'date_to'),
+    branchId: _g<int>(j, 'branch_id'),
+    categoryId: _g<int>(j, 'category_id'),
+  );
 }
 
 class VoiceReport {
@@ -851,15 +915,15 @@ class VoiceReport {
   });
 
   factory VoiceReport.fromJson(Map<String, dynamic> j) => VoiceReport(
-        recognized: _g<bool>(j, 'recognized', false) ?? false,
-        message: _g<String>(j, 'message', '') ?? '',
-        intent: j['intent'] is Map
-            ? VoiceIntent.fromJson(j['intent'] as Map<String, dynamic>)
-            : const VoiceIntent(),
-        data: j['data'] is Map
-            ? DashboardReport.fromJson(j['data'] as Map<String, dynamic>)
-            : null,
-      );
+    recognized: _g<bool>(j, 'recognized', false) ?? false,
+    message: _g<String>(j, 'message', '') ?? '',
+    intent: j['intent'] is Map
+        ? VoiceIntent.fromJson(j['intent'] as Map<String, dynamic>)
+        : const VoiceIntent(),
+    data: j['data'] is Map
+        ? DashboardReport.fromJson(j['data'] as Map<String, dynamic>)
+        : null,
+  );
 }
 
 class Promotion {
@@ -888,17 +952,17 @@ class Promotion {
   });
 
   factory Promotion.fromJson(Map<String, dynamic> j) => Promotion(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        description: _g<String>(j, 'description'),
-        discountType: _g<String>(j, 'discount_type', 'PERCENTAGE') ?? 'PERCENTAGE',
-        value: _num(j, 'value'),
-        targetType: _g<String>(j, 'target_type', 'GLOBAL') ?? 'GLOBAL',
-        targetId: _g<int>(j, 'target_id'),
-        startDate: _g<String>(j, 'start_date'),
-        endDate: _g<String>(j, 'end_date'),
-        isActive: _g<bool>(j, 'is_active', true) ?? true,
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    description: _g<String>(j, 'description'),
+    discountType: _g<String>(j, 'discount_type', 'PERCENTAGE') ?? 'PERCENTAGE',
+    value: _num(j, 'value'),
+    targetType: _g<String>(j, 'target_type', 'GLOBAL') ?? 'GLOBAL',
+    targetId: _g<int>(j, 'target_id'),
+    startDate: _g<String>(j, 'start_date'),
+    endDate: _g<String>(j, 'end_date'),
+    isActive: _g<bool>(j, 'is_active', true) ?? true,
+  );
 }
 
 class Proposal {
@@ -927,17 +991,17 @@ class Proposal {
   });
 
   factory Proposal.fromJson(Map<String, dynamic> j) => Proposal(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        providerId: _g<int>(j, 'provider_id', 0) ?? 0,
-        providerName: _g<String>(j, 'provider_name'),
-        name: _g<String>(j, 'name', '') ?? '',
-        description: _g<String>(j, 'description'),
-        basePrice: _num(j, 'base_price'),
-        status: _g<String>(j, 'status', 'PENDIENTE') ?? 'PENDIENTE',
-        adminComment: _g<String>(j, 'admin_comment'),
-        createdAt: _g<String>(j, 'created_at'),
-        processedAt: _g<String>(j, 'processed_at'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    providerId: _g<int>(j, 'provider_id', 0) ?? 0,
+    providerName: _g<String>(j, 'provider_name'),
+    name: _g<String>(j, 'name', '') ?? '',
+    description: _g<String>(j, 'description'),
+    basePrice: _num(j, 'base_price'),
+    status: _g<String>(j, 'status', 'PENDIENTE') ?? 'PENDIENTE',
+    adminComment: _g<String>(j, 'admin_comment'),
+    createdAt: _g<String>(j, 'created_at'),
+    processedAt: _g<String>(j, 'processed_at'),
+  );
 }
 
 class ProviderInfo {
@@ -960,14 +1024,14 @@ class ProviderInfo {
   });
 
   factory ProviderInfo.fromJson(Map<String, dynamic> j) => ProviderInfo(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        name: _g<String>(j, 'name', '') ?? '',
-        contactEmail: _g<String>(j, 'contact_email'),
-        nit: _g<String>(j, 'nit'),
-        phone: _g<String>(j, 'phone'),
-        address: _g<String>(j, 'address'),
-        isActive: _g<bool>(j, 'is_active', true) ?? true,
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    name: _g<String>(j, 'name', '') ?? '',
+    contactEmail: _g<String>(j, 'contact_email'),
+    nit: _g<String>(j, 'nit'),
+    phone: _g<String>(j, 'phone'),
+    address: _g<String>(j, 'address'),
+    isActive: _g<bool>(j, 'is_active', true) ?? true,
+  );
 }
 
 class ProviderMe {
@@ -978,12 +1042,21 @@ class ProviderMe {
   ProviderMe({required this.user, this.role = '', this.provider});
 
   factory ProviderMe.fromJson(Map<String, dynamic> j) => ProviderMe(
-        user: j['user'] is Map ? User.fromJson(j['user'] as Map<String, dynamic>) : User(id: 0, firstName: '', lastName: '', email: '', roleName: '', isActive: true),
-        role: _g<String>(j, 'role', '') ?? '',
-        provider: j['provider'] is Map
-            ? ProviderInfo.fromJson(j['provider'] as Map<String, dynamic>)
-            : null,
-      );
+    user: j['user'] is Map
+        ? User.fromJson(j['user'] as Map<String, dynamic>)
+        : User(
+            id: 0,
+            firstName: '',
+            lastName: '',
+            email: '',
+            roleName: '',
+            isActive: true,
+          ),
+    role: _g<String>(j, 'role', '') ?? '',
+    provider: j['provider'] is Map
+        ? ProviderInfo.fromJson(j['provider'] as Map<String, dynamic>)
+        : null,
+  );
 }
 
 class AppNotification {
@@ -1004,13 +1077,13 @@ class AppNotification {
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
-        id: _g<int>(j, 'id', 0) ?? 0,
-        userId: _g<int>(j, 'user_id', 0) ?? 0,
-        title: _g<String>(j, 'title', '') ?? '',
-        message: _g<String>(j, 'message'),
-        isRead: _g<bool>(j, 'is_read', false) ?? false,
-        createdAt: _g<String>(j, 'created_at'),
-      );
+    id: _g<int>(j, 'id', 0) ?? 0,
+    userId: _g<int>(j, 'user_id', 0) ?? 0,
+    title: _g<String>(j, 'title', '') ?? '',
+    message: _g<String>(j, 'message'),
+    isRead: _g<bool>(j, 'is_read', false) ?? false,
+    createdAt: _g<String>(j, 'created_at'),
+  );
 }
 
 class AuthResult {
@@ -1027,11 +1100,11 @@ class AuthResult {
   });
 
   factory AuthResult.fromJson(Map<String, dynamic> j) => AuthResult(
-        accessToken: _g<String>(j, 'access_token', '') ?? '',
-        role: _g<String>(j, 'role', '') ?? '',
-        email: _g<String>(j, 'email', '') ?? '',
-        userId: _g<int>(j, 'user_id', 0) ?? 0,
-      );
+    accessToken: _g<String>(j, 'access_token', '') ?? '',
+    role: _g<String>(j, 'role', '') ?? '',
+    email: _g<String>(j, 'email', '') ?? '',
+    userId: _g<int>(j, 'user_id', 0) ?? 0,
+  );
 }
 
 String money(double value) {

@@ -21,6 +21,16 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _registerMode = false;
   bool _loading = false;
   bool _obscure = true;
+  List<dynamic> _stores = [];
+  int? _empresaId;
+
+  @override
+  void initState() {
+    super.initState();
+    api.request('GET', '/plataforma/tiendas', auth: false).then((data) {
+      if (mounted) setState(() => _stores = data as List);
+    }).catchError((_) {});
+  }
 
   @override
   void dispose() {
@@ -41,6 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
           lastName: _lastName.text.trim(),
           email: _email.text.trim(),
           password: _password.text,
+          empresaId: _empresaId,
         );
         if (!mounted) return;
         showSnack(context, 'Cuenta creada. Inicia sesión para continuar.');
@@ -73,6 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 12),
+                    if (_registerMode && _stores.isNotEmpty)
+                      DropdownButtonFormField<int>(initialValue: _empresaId, decoration: const InputDecoration(labelText: 'Tienda'),
+                        items: [for (final store in _stores) DropdownMenuItem(value: store['id'] as int, child: Text(store['nombre'] as String))],
+                        onChanged: (value) => setState(() => _empresaId = value), validator: (value) => value == null ? 'Selecciona tu tienda' : null),
                     const Icon(Icons.storefront, size: 64, color: AppColors.primary),
                     const SizedBox(height: 8),
                     Text(
@@ -142,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       validator: (v) =>
-                          (v == null || v.length < 4) ? 'Mínimo 4 caracteres' : null,
+                          (v == null || v.length < (_registerMode ? 6 : 1)) ? 'Contraseña inválida' : null,
                     ),
                     const SizedBox(height: 20),
                     AppPrimaryButton(

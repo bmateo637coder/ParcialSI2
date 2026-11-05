@@ -10,8 +10,9 @@ está dentro de [start_date, end_date] (inclusive; fechas opcionales = sin lími
 En empate (mismo importe en Bs) gana el id menor.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.catalog import Category, Product, ProductVariant
@@ -40,10 +41,20 @@ def promotion_discount_for_variant(db: Session, variant: ProductVariant) -> tupl
     El descuento es el mayor ahorro en Bs entre las promociones vigentes que
     aplican a la variante; si ninguna aplica devuelve (None, 0.0).
     """
-    today = datetime.now().date()
+    today = datetime.now(timezone.utc).date()
     effective: float = variant.effective_price
 
-    promos = db.query(Promotion).all()
+    empresa_id = variant.product.empresa_id
+    if empresa_id is None and variant.product.category:
+        empresa_id = variant.product.category.empresa_id
+
+    promos_query = db.query(Promotion)
+    if empresa_id is not None:
+        promos_query = promos_query.filter(or_(Promotion.empresa_id == empresa_id,
+                                               Promotion.empresa_id.is_(None)))
+    else:
+        promos_query = promos_query.filter(Promotion.empresa_id.is_(None))
+    promos = promos_query.all()
     best_id: int | None = None
     best_discount: float = 0.0
 
@@ -86,11 +97,27 @@ def promotion_discount_for_variant(db: Session, variant: ProductVariant) -> tupl
     return best_id, best_discount
 
 
-def validate_target(db: Session, promo) -> None:
-    """Valida que un objetivo referenciado exista (producto o categoría)."""
+def _belongs_to_tenant(category: Category | None, empresa_id: int | None) -> bool:
+    if empresa_id is None or category is None:
+        return True
+    return category.empresa_id in (None, empresa_id)
+
+
+def validate_target(db: Session, promo, empresa_id: int | None = None) -> None:
+    """Valida que un objetivo exista y no cruce el límite de la empresa."""
     if promo.target_type == "PRODUCT":
-        if promo.target_id is not None and db.get(Product, promo.target_id) is None:
+        product = db.get(Product, promo.target_id) if promo.target_id is not None else None
+        if promo.target_id is not None and product is None:
             raise ValueError(f"El producto {promo.target_id} no existe")
+        if product is not None:
+            if product.empresa_id not in (None, empresa_id):
+                raise ValueError(f"El producto {promo.target_id} no existe")
+            category = db.get(Category, product.category_id) if product.category_id else None
+            if not _belongs_to_tenant(category, empresa_id):
+                raise ValueError(f"El producto {promo.target_id} no existe")
     elif promo.target_type == "CATEGORY":
-        if promo.target_id is not None and db.get(Category, promo.target_id) is None:
+        category = db.get(Category, promo.target_id) if promo.target_id is not None else None
+        if promo.target_id is not None and category is None:
+            raise ValueError(f"La categoría {promo.target_id} no existe")
+        if category is not None and not _belongs_to_tenant(category, empresa_id):
             raise ValueError(f"La categoría {promo.target_id} no existe")

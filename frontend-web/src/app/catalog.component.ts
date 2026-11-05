@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { ApiService, CategoryItem, Product, ProductVariant, RecommendedItem } from './api.service';
 import { CommonModule } from '@angular/common';
 import { ToastService } from './toast.service';
+import { StoreSelectorComponent } from './store-selector.component';
 
 const FALLBACK_IMG = '/img/placeholder.svg';
 const REC_IMG =
@@ -12,8 +13,9 @@ const REC_IMG =
 @Component({
   selector: 'app-catalog',
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, StoreSelectorComponent],
   template: `
+  <app-store-selector (selected)="loadCatalog()"></app-store-selector>
   <div class="page-head">
     <span class="eyebrow">Colección de temporada</span>
     <h1>Moda que inspira</h1>
@@ -197,9 +199,18 @@ export class CatalogComponent implements OnInit {
   constructor(private api: ApiService, private router: Router, private toast: ToastService) {}
 
   ngOnInit(): void {
+    if (this.api.isAuthenticated) this.loadCatalog();
+  }
+
+  loadCatalog(): void {
+    this.products = [];
+    this.categories = [];
+    this.activeCategory = null;
+    this.closeDetail();
     this.loading = true;
+    const storeId = this.api.storefrontId;
     this.api.getCategories().subscribe({
-      next: (cats) => (this.categories = cats),
+      next: (cats) => { if (this.api.isAuthenticated || this.api.storefrontId === storeId) this.categories = cats; },
       error: () => {},
     });
     if (this.api.isAuthenticated) {
@@ -236,18 +247,21 @@ export class CatalogComponent implements OnInit {
   }
 
   tryOn(p: Product): void {
-    this.router.navigate(['/vestidor'], { state: { product: p } });
+    this.router.navigate(['/vestidor'], { queryParams: { producto: p.id }, state: { product: p } });
   }
 
   search(): void {
     this.loading = true;
     this.error = false;
+    const storeId = this.api.storefrontId;
     this.api.getProducts(this.q, this.activeCategory ?? undefined).subscribe({
       next: (res) => {
+        if (!this.api.isAuthenticated && this.api.storefrontId !== storeId) return;
         this.products = res;
         this.loading = false;
       },
       error: () => {
+        if (!this.api.isAuthenticated && this.api.storefrontId !== storeId) return;
         this.loading = false;
         this.error = true;
       },
@@ -267,6 +281,7 @@ export class CatalogComponent implements OnInit {
     this.variantsLoading = true;
     this.api.getVariants(p.id).subscribe({
       next: (res) => {
+        if (this.selected?.id !== p.id) return;
         this.variants = res;
         this.variantsLoading = false;
       },

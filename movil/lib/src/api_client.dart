@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import '../core/offline/offline_db.dart';
 
 const _kToken = 'fs_token';
 const _kRole = 'fs_role';
@@ -34,13 +35,17 @@ String defaultBaseUrl() {
 class ApiClient {
   final String baseUrl;
   final http.Client _client;
+  final OfflineCache _cache;
 
-  ApiClient({http.Client? client, String? baseUrl})
+  ApiClient({http.Client? client, String? baseUrl, OfflineCache? cache})
       : baseUrl = baseUrl ?? defaultBaseUrl(),
-        _client = client ?? http.Client();
+        _client = client ?? http.Client(),
+        _cache = cache ?? OfflineDb.instance;
 
   String? _token;
   User? currentUser;
+  final offline = ValueNotifier<bool>(false);
+  String get offlineScope => '${currentUser?.empresaId ?? 'public'}:${currentUser?.id ?? 'guest'}';
 
   bool get isAuthenticated => _token != null;
 
@@ -67,8 +72,8 @@ class ApiClient {
     if (_token != null && currentUser != null) {
       try {
         currentUser = await getProfile();
-      } catch (_) {
-        await logout();
+      } on ApiError catch (e) {
+        if (e.status == 401) await logout();
       }
     }
   }
@@ -106,6 +111,12 @@ class ApiClient {
 
   Future<dynamic> request(String method, String path,
       {Object? body, bool auth = true}) async {
+    final scope = offlineScope;
+    final cacheable = method == 'GET' && !path.startsWith('/auth/') && path != '/health' && !kIsWeb;
+    if (cacheable && offline.value) {
+      final cached = await _cache.leerCache(scope, path);
+      if (cached != null) return cached;
+    }
     final uri = Uri.parse('$baseUrl$path');
     final headers = _headers();
     if (!auth) headers.remove('Authorization');
@@ -117,6 +128,11 @@ class ApiClient {
       final streamed = await _client.send(req).timeout(const Duration(seconds: 25));
       res = await http.Response.fromStream(streamed);
     } on Exception catch (e) {
+      offline.value = true;
+      if (cacheable) {
+        final cached = await _cache.leerCache(scope, path);
+        if (cached != null && scope == offlineScope) return cached;
+      }
       throw ApiError(0, 'No se pudo conectar con el servidor ($e). Revisa tu conexión.');
     }
 
@@ -128,6 +144,10 @@ class ApiClient {
     }
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
+      offline.value = false;
+      if (cacheable) {
+        try { await _cache.guardarCache(scope, path, data); } catch (_) { /* La respuesta online sigue siendo válida. */ }
+      }
       return data;
     }
 
@@ -165,6 +185,7 @@ class ApiClient {
     final data = await request('POST', '/auth/login',
         body: {'email': email, 'password': password}, auth: false);
     final result = AuthResult.fromJson(data as Map<String, dynamic>);
+    _token = result.accessToken;
     final user = await getProfile();
     await saveSession(result.accessToken, result.role, result.email, user);
     return user;
@@ -175,12 +196,14 @@ class ApiClient {
     required String lastName,
     required String email,
     required String password,
+    int? empresaId,
   }) async {
     final data = await request('POST', '/auth/register', auth: false, body: {
       'first_name': firstName,
       'last_name': lastName,
       'email': email,
       'password': password,
+      'empresa_id': ?empresaId,
     });
     return User.fromJson(data as Map<String, dynamic>);
   }
@@ -194,10 +217,10 @@ class ApiClient {
   Future<User> updateProfile(
       {String? firstName, String? lastName, String? email, String? phone}) async {
     final data = await request('PATCH', '/auth/me', body: {
-      if (firstName != null) 'first_name': firstName,
-      if (lastName != null) 'last_name': lastName,
-      if (email != null) 'email': email,
-      if (phone != null) 'phone': phone,
+      'first_name': ?firstName,
+      'last_name': ?lastName,
+      'email': ?email,
+      'phone': ?phone,
     });
     currentUser = User.fromJson(data as Map<String, dynamic>);
     return currentUser!;
@@ -218,7 +241,7 @@ class ApiClient {
   // ------------------------------------------------------------------
   Future<List<Branch>> getBranches({String city = ''}) async {
     final path = city.trim().isEmpty ? '/branches/' : '/branches/?city=${Uri.encodeQueryComponent(city.trim())}';
-    final data = await request('GET', path, auth: false);
+    final data = await request('GET', path);
     return (data as List).map((e) => Branch.fromJson(e)).toList();
   }
 
@@ -232,37 +255,46 @@ class ApiClient {
     if (categoryId != null) params.add('category_id=$categoryId');
     if (seasonId != null) params.add('season_id=$seasonId');
     final qs = params.isEmpty ? '' : '?${params.join('&')}';
-    final data = await request('GET', '/products/$qs', auth: false);
+    final data = await request('GET', '/products/$qs');
     return (data as List).map((e) => Product.fromJson(e)).toList();
   }
 
+  Future<void> prepararOffline() async {
+    offline.value = false;
+    final products = await getProducts();
+    await Future.wait([getBranches(), getCategories(), getSeasons(), getAvailability()]);
+    for (final product in products.take(100)) {
+      await getVariants(product.id);
+    }
+  }
+
   Future<Product> getProduct(int id) async {
-    final data = await request('GET', '/products/$id', auth: false);
+    final data = await request('GET', '/products/$id');
     return Product.fromJson(data as Map<String, dynamic>);
   }
 
   Future<List<ProductVariant>> getVariants(int productId) async {
-    final data = await request('GET', '/products/$productId/variants', auth: false);
+    final data = await request('GET', '/products/$productId/variants');
     return (data as List).map((e) => ProductVariant.fromJson(e)).toList();
   }
 
   Future<List<CategoryItem>> getCategories() async {
-    final data = await request('GET', '/products/metadata/categories', auth: false);
+    final data = await request('GET', '/products/metadata/categories');
     return (data as List).map((e) => CategoryItem.fromJson(e)).toList();
   }
 
   Future<List<IdName>> getSeasons() async {
-    final data = await request('GET', '/products/metadata/seasons', auth: false);
+    final data = await request('GET', '/products/metadata/seasons');
     return (data as List).map((e) => IdName.fromJson(e)).toList();
   }
 
   Future<List<IdName>> getSizes() async {
-    final data = await request('GET', '/products/metadata/sizes', auth: false);
+    final data = await request('GET', '/products/metadata/sizes');
     return (data as List).map((e) => IdName.fromJson(e)).toList();
   }
 
   Future<List<IdName>> getColors() async {
-    final data = await request('GET', '/products/metadata/colors', auth: false);
+    final data = await request('GET', '/products/metadata/colors');
     return (data as List).map((e) => IdName.fromJson(e)).toList();
   }
 
@@ -276,7 +308,7 @@ class ApiClient {
     if (branchId != null) params.add('branch_id=$branchId');
     if (q.trim().isNotEmpty) params.add('q=${Uri.encodeQueryComponent(q.trim())}');
     final qs = params.isEmpty ? '' : '?${params.join('&')}';
-    final data = await request('GET', '/inventory/availability$qs', auth: false);
+    final data = await request('GET', '/inventory/availability$qs');
     return (data as List).map((e) => AvailabilityItem.fromJson(e)).toList();
   }
 
@@ -375,8 +407,8 @@ class ApiClient {
   }) async {
     final data = await request('POST', '/orders/checkout', body: {
       'order_type': orderType,
-      if (branchId != null) 'branch_id': branchId,
-      if (items != null) 'items': items,
+      'branch_id': ?branchId,
+      'items': ?items,
       'payment_method': paymentMethod,
       if (cardNumber != null && cardNumber.isNotEmpty) 'card_number': cardNumber,
       if (shippingAddress != null && shippingAddress.isNotEmpty)
@@ -391,12 +423,16 @@ class ApiClient {
     String? clientId,
     required String paymentMethod,
     String? cardNumber,
+    String? requestId,
+    double? cashReceived,
   }) async {
     final data = await request('POST', '/pos/sale', body: {
       'branch_id': branchId,
       'items': items,
       if (clientId != null && clientId.isNotEmpty) 'client_id': int.parse(clientId),
       'payment_method': paymentMethod,
+      'request_id': ?requestId,
+      'cash_received': ?cashReceived,
       if (cardNumber != null && cardNumber.isNotEmpty) 'card_number': cardNumber,
     });
     return Order.fromJson(data as Map<String, dynamic>);
@@ -521,7 +557,7 @@ class ApiClient {
     final data = await request('POST', '/providers/products', body: {
       'name': name,
       'base_price': basePrice,
-      if (description != null) 'description': description,
+      'description': ?description,
     });
     return Proposal.fromJson(data as Map<String, dynamic>);
   }
@@ -533,13 +569,13 @@ class ApiClient {
 
   Future<Proposal> approveProposal(int id, {String? comment}) async {
     final data = await request('PATCH', '/providers/proposals/$id/approve',
-        body: {'admin_comment': comment ?? null});
+        body: {'admin_comment': comment});
     return Proposal.fromJson(data as Map<String, dynamic>);
   }
 
   Future<Proposal> rejectProposal(int id, {String? comment}) async {
     final data = await request('PATCH', '/providers/proposals/$id/reject',
-        body: {'admin_comment': comment ?? null});
+        body: {'admin_comment': comment});
     return Proposal.fromJson(data as Map<String, dynamic>);
   }
 
@@ -592,7 +628,7 @@ class ApiClient {
       'inventory_id': inventoryId,
       'movement_type': movementType,
       'quantity': quantity,
-      if (reason != null) 'reason': reason,
+      'reason': ?reason,
     });
   }
 }

@@ -83,7 +83,7 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: targetType,
+                    initialValue: targetType,
                     decoration: const InputDecoration(labelText: 'Ámbito'),
                     items: const [
                       DropdownMenuItem(value: 'GLOBAL', child: Text('Global')),
@@ -107,7 +107,7 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
                     decoration: const InputDecoration(labelText: 'Descripción'),
                   ),
                   DropdownButtonFormField<String>(
-                    value: type,
+                    initialValue: type,
                     decoration: const InputDecoration(labelText: 'Tipo'),
                     items: const [
                       DropdownMenuItem(value: 'PERCENTAGE', child: Text('Porcentaje %')),

@@ -1,37 +1,61 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { dbOffline, OperacionLocal } from './offline-db.service';
+import { firstValueFrom } from 'rxjs';
+import { dbOffline, OperacionLocal, offlineUser, offlineScope } from './offline-db.service';
 import { environment } from '../../../environments/environment';
+
+interface SyncItemResult {
+  uuid: string;
+  estado: 'CONFIRMADA' | 'RECHAZADA' | 'EN_CONFLICTO';
+  mensaje?: string;
+}
+
+interface SyncResponse {
+  mensaje?: string;
+  resultados?: SyncItemResult[];
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class SyncOfflineService {
   private http = inject(HttpClient);
+  private enCurso: Promise<SyncResponse> | null = null;
+
+  private contexto(operacion: Partial<OperacionLocal>): Partial<OperacionLocal> {
+    const user = offlineUser();
+    return { ...operacion, usuarioId: user?.id, empresaId: user?.empresa_id, formaPago: 'EFECTIVO' };
+  }
 
   async registrarVentaOffline(venta: Partial<OperacionLocal>): Promise<string> {
-    const uuid = await dbOffline.agregarOperacion({
-      ...venta,
+    return dbOffline.agregarOperacion({
+      ...this.contexto(venta),
       tipoOperacion: 'VENTA_CONTADO'
     });
-    return uuid;
   }
 
   async registrarReservaOffline(reserva: Partial<OperacionLocal>): Promise<string> {
-    const uuid = await dbOffline.agregarOperacion({
-      ...reserva,
+    return dbOffline.agregarOperacion({
+      ...this.contexto(reserva),
       tipoOperacion: 'RESERVA'
     });
-    return uuid;
   }
 
-  async sincronizar(): Promise<any> {
+  sincronizar(): Promise<SyncResponse> {
+    if (!this.enCurso) this.enCurso = this.enviar().finally(() => { this.enCurso = null; });
+    return this.enCurso;
+  }
+
+  private async enviar(): Promise<SyncResponse> {
+    const scope = offlineScope();
+    const token = localStorage.getItem('token');
+    if (!token || !offlineUser()?.empresa_id) return { mensaje: 'Inicia sesión en tu empresa para sincronizar.' };
     const pendientes = await dbOffline.obtenerPendientes();
     if (pendientes.length === 0) {
       return { mensaje: 'Sin operaciones pendientes' };
     }
 
-    const operaciones = pendientes.map((p) => ({
+    const operaciones = pendientes.slice(0, 200).map((p) => ({
       uuid: p.uuid,
       tipo_operacion: p.tipoOperacion,
       sucursal_id: p.sucursalId,
@@ -41,18 +65,35 @@ export class SyncOfflineService {
       items: p.items,
       total: p.total,
       forma_pago: p.formaPago,
+      payload_extra: p.payload?.payload ?? {},
       origen: 'OFFLINE'
     }));
 
-    for (const p of pendientes) {
-      await dbOffline.marcarEnviada(p.uuid);
+    if (scope !== offlineScope()) throw new Error('La sesión cambió. Vuelve a sincronizar.');
+    await dbOffline.marcarEnviadas(operaciones.map(op => op.uuid));
+    const resp = await firstValueFrom(
+      this.http.post<SyncResponse>(`${environment.apiUrl}/sync`, { operaciones }, { headers: { Authorization: `Bearer ${token}` } })
+    );
+
+    for (const resultado of resp.resultados ?? []) {
+      if (operaciones.some(op => op.uuid === resultado.uuid)) {
+        await dbOffline.actualizarEstado(resultado.uuid, resultado.estado, resultado.mensaje, resultado);
+      }
     }
 
-    const resp = await this.http.post(`${environment.apiUrl}/sync`, { operaciones }).toPromise();
     return resp;
   }
 
   async obtenerPendientes(): Promise<OperacionLocal[]> {
     return dbOffline.obtenerPendientes();
+  }
+
+  async obtenerOperaciones(): Promise<OperacionLocal[]> { return dbOffline.obtenerOperaciones(); }
+
+  async sincronizarSiConectado(): Promise<SyncResponse> {
+    if (!navigator.onLine) {
+      return { mensaje: 'Sin conexión. Se sincronizará al recuperar internet.' };
+    }
+    return this.sincronizar();
   }
 }

@@ -1,20 +1,32 @@
-<section style="padding: 1.5rem;">
-  <h2>Sincronización Offline</h2>
-  <p>Ventas de contado y reservas registradas sin conexión</p>
+<div class="p-4">
+  <h2 class="text-xl font-bold mb-2">Sincronización Offline</h2>
 
-  <button (click)="sincronizar()" [disabled]="cargando || pendientes.length === 0">
-    {{ cargando ? 'Sincronizando...' : 'Sincronizar pendientes' }}
-  </button>
+  <div class="mb-3 p-2 rounded" [ngClass]="online ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'">
+    Estado: {{ online ? 'Conectado' : 'Sin conexión - Se sincronizará al recuperar internet' }}
+  </div>
 
-  <h3>Operaciones pendientes: {{ pendientes.length }}</h3>
-  <ul>
-    <li *ngFor="let p of pendientes">
-      {{ p.tipoOperacion }} - UUID: {{ p.uuid }} - Estado: {{ p.estado }} - Total: {{ p.total }}
+  <div class="mb-4">
+    <button class="btn btn-outline" (click)="descargar()" [disabled]="cargando || !online">Descargar catálogo para trabajar sin conexión</button>
+    <button (click)="sincronizar()" [disabled]="cargando || !online" class="px-4 py-2 bg-black text-white rounded disabled:opacity-50">
+      {{ cargando ? 'Sincronizando...' : 'Sincronizar ahora' }}
+    </button>
+  </div>
+
+  <h3 class="font-semibold mb-2">Operaciones de este usuario y empresa ({{ pendientes.length }})</h3>
+  <div *ngIf="pendientes.length === 0" class="text-gray-500">No hay operaciones pendientes</div>
+  <ul class="space-y-2">
+    <li *ngFor="let op of pendientes" class="border p-2 rounded">
+      <div><strong>UUID:</strong> {{ op.uuid }}</div>
+      <div><strong>Tipo:</strong> {{ op.tipoOperacion }}</div>
+      <div><strong>Estado:</strong> {{ op.estado }}</div>
+      <div *ngIf="op.mensaje">{{ op.mensaje }}</div>
+      <div>Intentos: {{ op.intentos }}</div>
+      <div><strong>Fecha:</strong> {{ op.fechaLocal | date:'short' }}</div>
+      <div><strong>Total:</strong> {{ op.total | currency:'BOB' }}</div>
     </li>
   </ul>
 
-  <div *ngIf="resultado">
-    <h3>Resultado</h3>
-    <pre>{{ resultado | json }}</pre>
+  <div *ngIf="resultado" class="mt-4 p-3 bg-gray-100 rounded">
+    <pre class="text-sm">{{ resultado | json }}</pre>
   </div>
-</section>
+</div>

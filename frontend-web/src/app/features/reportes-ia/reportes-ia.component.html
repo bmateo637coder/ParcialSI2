@@ -2,19 +2,42 @@
   <h2>Reportes con Lenguaje Natural (IA)</h2>
   <p>Requiere plan Profesional</p>
 
-  <div>
-    <input [(ngModel)]="pregunta" placeholder="Ej: Ventas del mes por sucursal" style="width: 400px; padding: 0.5rem;" />
-    <button (click)="generar()" [disabled]="cargando || !pregunta">Generar reporte</button>
+  <div class="card" style="padding:1rem;display:grid;gap:1rem;">
+    <label>¿Qué información necesitas?
+      <input class="form-control" [(ngModel)]="pregunta" placeholder="Ej: Ventas de septiembre de 2026 por sucursal" (keyup.enter)="generar()" />
+    </label>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <label>Desde (opcional)<input class="form-control" type="date" [(ngModel)]="desde"></label>
+      <label>Hasta (opcional)<input class="form-control" type="date" [(ngModel)]="hasta"></label>
+    </div>
+    <p>También puedes pedir productos más vendidos, inventario, reservas por estado, ventas por semana o ingresos por categoría.</p>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <button class="btn btn-outline" (click)="escuchar()" [disabled]="escuchando">{{ escuchando ? 'Escuchando…' : 'Dictar solicitud' }}</button>
+      <button class="btn btn-primary" (click)="generar()" [disabled]="cargando || !pregunta.trim()">Generar reporte</button>
+    </div>
   </div>
 
   <p style="color: red;" *ngIf="error">{{ error }}</p>
   <p *ngIf="cargando">Procesando...</p>
 
   <div *ngIf="resultado">
-    <h3>{{ resultado.tipo_reporte }}</h3>
+    <h3>{{ resultado.tipo_reporte.replaceAll('_', ' ') }}</h3>
     <p>{{ resultado.mensaje }}</p>
     <button (click)="exportar('pdf')">Exportar PDF</button>
     <button (click)="exportar('excel')">Exportar Excel</button>
-    <pre>{{ resultado | json }}</pre>
+    <p>Periodo: {{ resultado.filtros_aplicados.fecha_desde }} — {{ resultado.filtros_aplicados.fecha_hasta }}</p>
+    <p *ngIf="!resultado.filas.length">No hay datos para la solicitud y el periodo elegidos.</p>
+    <div style="overflow-x:auto;margin-top:1rem;">
+      <table *ngIf="resultado.filas.length" style="width:100%;border-collapse:collapse;">
+        <thead><tr><th *ngFor="let column of resultado.columnas" style="text-align:left;padding:.7rem;border-bottom:2px solid var(--line);">{{ column.replaceAll('_', ' ') }}</th></tr></thead>
+        <tbody><tr *ngFor="let row of resultado.filas"><td *ngFor="let column of resultado.columnas" style="padding:.7rem;border-bottom:1px solid var(--line);">{{ row[column] }}</td></tr></tbody>
+      </table>
+    </div>
+    <div *ngIf="resultado.grafico?.datos?.length" style="margin-top:2rem;" aria-label="Gráfico de resultados">
+      <div *ngFor="let label of resultado.grafico.labels; let i = index" style="margin:.8rem 0;">
+        <div>{{ label }}: <strong>{{ resultado.grafico.datos[i] | number:'1.0-2' }}</strong></div>
+        <div style="height:18px;border-radius:4px;" [style.background]="resultado.grafico.datos[i] < 0 ? '#b42318' : 'var(--accent-dark)'" [style.width.%]="porcentaje(resultado.grafico.datos[i])"></div>
+      </div>
+    </div>
   </div>
 </section>

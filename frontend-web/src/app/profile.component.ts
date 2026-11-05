@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, User, Order } from './api.service';
 import { CommonModule } from '@angular/common';
 import { ToastService } from './toast.service';
+import { RouterLink } from '@angular/router';
 
 const ORDER_EMOJI: Record<string, string> = {
   PENDIENTE: '⏳',
@@ -15,7 +16,7 @@ const ORDER_EMOJI: Record<string, string> = {
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, RouterLink],
   template: `
   <div class="page-head">
     <span class="eyebrow">Tu cuenta</span>
@@ -140,6 +141,9 @@ const ORDER_EMOJI: Record<string, string> = {
             </div>
           </div>
           <div class="order-total">Total: <strong>Bs. {{ o.total | number: '1.2-2' }}</strong></div>
+          <p *ngIf="o.refunded_total">Reembolsado: <strong>Bs. {{ o.refunded_total | number:'1.2-2' }}</strong> · Neto: Bs. {{ o.net_total | number:'1.2-2' }}</p>
+          <p *ngIf="o.refund_pending">Devolución pendiente de confirmar: Bs. {{ o.refund_pending | number:'1.2-2' }}</p>
+          <a *ngIf="o.payment?.paid_at" class="btn btn-outline btn-sm" routerLink="/reembolsos" [queryParams]="{pedido:o.id}">Reembolsos y devoluciones</a>
         </div>
       </div>
     </div>

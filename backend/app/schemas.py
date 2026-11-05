@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -18,6 +18,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=6, max_length=128)
+    empresa_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
@@ -44,6 +45,7 @@ class ResetPasswordResponse(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    empresa_id: Optional[int] = None
     is_active: bool
     role_id: Optional[int] = None
     role_name: Optional[str] = None
@@ -560,6 +562,8 @@ class PosSaleCreate(BaseModel):
     client_id: Optional[int] = None
     payment_method: str = Field(default="EFECTIVO", pattern=r"^(TARJETA|EFECTIVO|TRANSFERENCIA)$")
     card_number: Optional[str] = Field(default=None, max_length=30)
+    request_id: Optional[str] = Field(default=None, pattern=r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    cash_received: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class PayRequest(BaseModel):
@@ -567,6 +571,19 @@ class PayRequest(BaseModel):
 
     payment_method: str = Field(default="TARJETA", pattern=r"^(TARJETA|EFECTIVO|TRANSFERENCIA)$")
     card_number: Optional[str] = Field(default=None, max_length=30)
+    cash_received: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+
+
+class ExchangeRequest(BaseModel):
+    order_item_id: int = Field(gt=0)
+    replacement_variant_id: int = Field(gt=0)
+    quantity: int = Field(ge=1, le=1000)
+    cash_difference: float = Field(default=0, allow_inf_nan=False)
+    observations: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ReservationCheckoutRequest(BaseModel):
+    items: list[OrderItemInput] = Field(min_length=1)
 
 
 class OrderStatusUpdate(BaseModel):
@@ -596,6 +613,8 @@ class PaymentBrief(BaseModel):
     amount: float
     status: str
     stripe_payment_id: Optional[str] = None
+    cash_received: Optional[float] = None
+    change_amount: float = 0
     created_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
 
@@ -611,13 +630,45 @@ class OrderResponse(BaseModel):
     order_type: str
     status: str
     total: float
+    stock_deducted: bool = False
     shipping_address: Optional[str] = None
     receipt_number: Optional[str] = None
     created_at: Optional[datetime] = None
     items: list[OrderItemResponse] = []
     payment: Optional[PaymentBrief] = None
+    collected_total: float = 0
+    refunded_total: float = 0
+    refund_pending: float = 0
+    net_total: float = 0
+    refunds: list[dict] = []
+    returnable_items: list[dict] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RefundItemInput(BaseModel):
+    lot_key: str = Field(min_length=1, max_length=60)
+    quantity: int = Field(ge=1, le=10000)
+
+
+class RefundDecision(BaseModel):
+    approve: bool
+    restock: bool = False
+    comment: str = Field(default='',max_length=255)
+
+
+class StockReturnInput(BaseModel):
+    request_id: str = Field(pattern=r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    refund_item_id: int = Field(gt=0)
+    quantity: int = Field(ge=1, le=10000)
+
+
+class RefundCreate(BaseModel):
+    request_id: str = Field(pattern=r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    reason: str = Field(min_length=5, max_length=500)
+    amount: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    items: list[RefundItemInput] = Field(default_factory=list, max_length=200)
+    restock: bool = False
 
 
 # ======================================================================
@@ -700,6 +751,9 @@ class ReportKpis(BaseModel):
     """Indicadores operativos: ventas, inventario y reservas."""
 
     total_sales: float
+    gross_sales: float = 0
+    refund_amount: float = 0
+    refund_pending: float = 0
     total_orders: int
     avg_order: float
     reservations: int
@@ -771,6 +825,7 @@ class PromotionUpdate(BaseModel):
 
 class PromotionResponse(BaseModel):
     id: int
+    empresa_id: Optional[int] = None
     name: str
     description: Optional[str] = None
     discount_type: str
@@ -862,11 +917,11 @@ class VoiceReportResponse(BaseModel):
 
 
 class PlanBase(BaseModel):
-    nombre: str
-    max_sucursales: int = 2
+    nombre: str = Field(min_length=1, max_length=100)
+    max_sucursales: int = Field(default=2, ge=1, le=1000)
     permite_reportes_ia: bool = False
     permite_analitica_ml: bool = False
-    precio_mensual: float = 0.0
+    precio_mensual: float = Field(default=0.0, ge=0, allow_inf_nan=False)
     descripcion: Optional[str] = None
     is_active: bool = True
 
@@ -893,6 +948,10 @@ class EmpresaBase(BaseModel):
 
 class EmpresaCreate(EmpresaBase):
     plan_id: int
+    admin_first_name: str = Field(min_length=1, max_length=100)
+    admin_last_name: str = Field(min_length=1, max_length=100)
+    admin_email: EmailStr
+    admin_password: str = Field(min_length=6, max_length=128)
 
 
 class EmpresaResponse(EmpresaBase):
@@ -912,27 +971,34 @@ class SuscripcionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SuscripcionUpdate(BaseModel):
+    plan_id: Optional[int] = None
+    fecha_inicio: Optional[date] = None
+    fecha_vencimiento: Optional[date] = None
+    estado: Optional[str] = None
+
+
 # ======================================================================
 # SYNC OFFLINE - 2DO PARCIAL
 # ======================================================================
 
 
 class SyncItem(BaseModel):
-    uuid: str
+    uuid: str = Field(min_length=1, max_length=36)
     tipo_operacion: str
     sucursal_id: int
     usuario_id: int
     fecha_local: Optional[datetime] = None
     cliente_id: Optional[int] = None
     items: List[dict]
-    total: Optional[float] = 0.0
+    total: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     forma_pago: Optional[str] = "EFECTIVO"
     origen: str = "OFFLINE"
     payload_extra: Optional[dict] = None
 
 
 class SyncRequest(BaseModel):
-    operaciones: List[SyncItem]
+    operaciones: List[SyncItem] = Field(min_length=1, max_length=200)
 
 
 class SyncItemResult(BaseModel):
