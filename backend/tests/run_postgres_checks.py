@@ -20,7 +20,8 @@ with admin.connect() as connection:
 try:
     environment = dict(os.environ, TEST_DATABASE_URL=url.set(database=database).render_as_string(hide_password=False))
     result = subprocess.run([sys.executable, '-m', 'pytest',
-        'tests/test_sales_audit.py', 'tests/test_business_integrity.py', 'tests/test_refunds.py', '-q', '--tb=short'], env=environment)
+        'tests/test_sales_audit.py', 'tests/test_business_integrity.py', 'tests/test_refunds.py',
+        'tests/test_deploy.py', 'tests/test_serverless.py', '-q', '--tb=short'], env=environment)
 finally:
     with admin.connect() as connection:
         connection.execute(text('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=:name AND pid<>pg_backend_pid()'), {'name':database})

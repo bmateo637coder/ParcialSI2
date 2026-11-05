@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "angular",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "browser/browser",
+  "rewrites": [
+    { "source": "/((?!.*\\.[^/]+$).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/app-config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/ngsw.json", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/ngsw-worker.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+  ]
+}

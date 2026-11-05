@@ -1,132 +1,177 @@
-# Despliegue de FashionStore
+# Despliegue: Vercel + Neon
 
-Rama preparada: `feat/parcial2-vestidor-bitacora-reembolsos-despliegue`.
+Rama: `feat/parcial2-vestidor-bitacora-reembolsos-despliegue`.
 
-La aplicación web y la API están listas para configurar el alojamiento. Todavía
-no se han creado servicios externos ni publicado una URL de producción.
+Se usarán dos proyectos Vercel Hobby y un proyecto Neon Free independiente.
+No se utiliza Render ni se comparten sus cuotas. El `render.yaml` anterior
+se conserva como referencia y no se aplica en este despliegue.
+La preparación del repositorio no significa que ya exista una URL pública:
+es necesario conectar las cuentas de Vercel y Neon.
 
-## Arquitectura propuesta para el parcial
+Elegir **Hobby** y **Free**, sin activar pruebas Pro ni recursos pagos.
+Vercel Hobby permite uso personal no comercial: sirve para el parcial con
+pagos simulados; una tienda comercial real requiere revisar el alojamiento.
 
-| Componente | Servicio | Configuración del proyecto |
-| --- | --- | --- |
-| Web Angular / PWA | Render Static Site | `frontend-web`, salida `browser/browser` |
-| API FastAPI | Render Web Service | `backend`, Python, puerto `$PORT` |
-| PostgreSQL | Neon Free | `DATABASE_URL` externa con `sslmode=require` |
+## 1. Crear Neon y guardar las conexiones
 
-Las condiciones actuales de los planes están en [Render](https://render.com/docs/free)
-y [Neon](https://neon.com/pricing). El servicio web gratuito de Render se suspende
-tras 15 minutos sin tráfico y puede tardar alrededor de un minuto en despertar.
-Esto afecta la primera llamada a la API; la web estática permanece disponible.
-La base gratuita de Render vence después de 30 días, por lo que se propone Neon
-para conservar la base del parcial sin depender de ese periodo de prueba.
-Los planes gratuitos tienen límites de uso; revisar los paneles de cada proveedor.
+Crear un proyecto dedicado a FashionStore en Neon Free. En **Connect**,
+obtener dos cadenas con `sslmode=require`:
 
-## 1. Preparar la base de datos
+- **Direct**, sin `-pooler` en el host: migraciones y preparación del esquema.
+- **Pooled**, con `-pooler`: API en Vercel.
 
-1. Crear una cuenta y un proyecto PostgreSQL en Neon.
-2. Obtener la cadena de conexión PostgreSQL con SSL. Guardarla en el panel del
-   alojamiento como `DATABASE_URL`, sin incluirla en GitHub ni enviarla por chat.
-3. Elegir los datos iniciales: migrar la base local conserva catálogo, ventas,
-   inventario, usuarios y bitácora. Desplegar el código por sí solo no copia esos
-   datos. Guardar un respaldo antes de la migración.
-4. Si se elige una base nueva con datos de demostración, ejecutar `seed.py` una
-   sola vez contra esa base. El seed crea cuentas con credenciales conocidas y
-   restablece usuarios demo; no debe ejecutarse en cada arranque.
+Copiar `backend/.env.deploy.example` a `backend/.env.deploy` y guardar la
+conexión directa en `NEON_DATABASE_URL_DIRECT`. Ese archivo está ignorado por
+Git. No enviar credenciales por chat ni incluirlas en archivos de ejemplo.
 
-## 2. Configurar API y web
+El origen se lee del `backend/.env` local. Se puede sobrescribir con
+`SOURCE_DATABASE_URL` en `.env.deploy`.
 
-El archivo [`render.yaml`](render.yaml) define ambos servicios y apunta a la rama
-indicada. `autoDeployTrigger: off` deja los despliegues siguientes como manuales.
-Crear un Blueprint inicia su primer despliegue al aplicarlo.
+## 2. Copiar los datos locales
 
-Se puede usar **New → Blueprint** en [Render Dashboard](https://dashboard.render.com/),
-conectar este repositorio y seleccionar expresamente la rama preparada. Si la
-pantalla abre `main`, cambiar de rama antes de continuar.
+La migración requiere PostgreSQL en origen y destino, y las herramientas
+`pg_dump` y `pg_restore`. El script detecta sus instalaciones habituales en
+Windows. El cliente debe ser compatible con el servidor de origen.
 
-Revisar los nombres de los servicios antes de aplicar el Blueprint. Si ya existen
-servicios con esos nombres, Render puede asociar la configuración con ellos.
-Para una instalación separada, cambiar ambos nombres antes de crearla.
-
-También se pueden crear primero la API y después el sitio estático desde el panel:
-
-| Campo | API | Web |
-| --- | --- | --- |
-| Rama | Rama preparada | Rama preparada |
-| Root Directory | `backend` | `frontend-web` |
-| Build Command | `pip install -r requirements.txt` | `npm ci && npm run build` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` | No aplica |
-| Publish Directory | No aplica | `browser/browser` |
-| Health Check Path | `/api/health` | No aplica |
-| Ruta SPA | No aplica | `/*` → `/index.html`, tipo Rewrite |
-
-Crear los servicios por separado permite conocer la URL real de la API antes de
-configurar la web. No asumir que una URL sugerida está libre: usar la URL que
-Render asigne a cada servicio.
-
-## 3. Variables necesarias
-
-En la API:
-
-| Variable | Valor |
-| --- | --- |
-| `DATABASE_URL` | Conexión privada de Neon con SSL |
-| `SECRET_KEY` | Secreto aleatorio; el Blueprint lo genera automáticamente |
-| `BACKEND_CORS_ORIGINS` | Lista JSON con la URL HTTPS real de la web |
-| `FRONTEND_URL` | URL HTTPS real de la web, sin `/api` |
-| `AUTO_SEED` | `false` |
-| `ALLOW_DEMO_PASSWORD_RESET` | `false` |
-
-Ejemplo público de CORS, reemplazando el dominio por el real:
-
-```text
-["https://mi-tienda.onrender.com"]
-```
-
-En la web:
-
-| Variable | Valor |
-| --- | --- |
-| `FASHIONSTORE_API_URL` | URL HTTPS real de la API, terminada en `/api` |
-| `NODE_VERSION` | Valor del Blueprint, compatible con Angular 21 |
-
-Después de cambiar `FASHIONSTORE_API_URL`, reconstruir y desplegar la web: el
-comando de build genera `app-config.js`. Después de cambiar CORS o la conexión
-de la base, volver a desplegar la API.
-
-Si se crean ambos servicios mediante Blueprint y sus URLs definitivas difieren
-de las configuradas inicialmente, corregir las variables anteriores en el panel
-y volver a desplegar. Los campos `sync: false` solicitan su valor al crear el
-Blueprint; para servicios existentes hay que configurarlos desde el panel.
-
-## 4. Comprobar el despliegue
-
-1. Abrir `https://URL-API/api/health`: debe indicar API y base de datos `ok`.
-2. Abrir la web desde su URL HTTPS y comprobar catálogo y sucursales.
-3. Iniciar sesión y comprobar una operación de prueba, su movimiento de stock y
-   su registro en la bitácora.
-4. Comprobar reembolso parcial, saldo neto y reporte de devoluciones.
-5. Probar el vestidor concediendo permiso de cámara. La cámara necesita HTTPS o
-   localhost; el seguimiento corporal necesita descargar su modelo.
-
-Los reportes exportados se generan desde los resultados guardados en PostgreSQL;
-no necesitan conservar archivos de prueba del equipo local.
-Los pagos y reembolsos bancarios siguen siendo una simulación, incluso desplegados.
-
-## Aplicación Android
-
-Una vez que la API esté publicada, compilar desde `movil` con su URL real:
+Desde PowerShell, dentro de `backend`:
 
 ```powershell
-flutter build apk --release --dart-define=API_URL=https://URL-API/api
+.\venv\Scripts\python.exe deploy.py migrate
+.\venv\Scripts\python.exe deploy.py init
+.\venv\Scripts\python.exe deploy.py check
 ```
 
-Usar HTTPS y sustituir `URL-API`; `localhost` y `10.0.2.2` son direcciones de
-desarrollo. El APK se instala en el dispositivo; Render aloja la API y la web.
+`migrate` comprueba que el destino esté vacío y sea distinto del origen.
+Crea un respaldo y manifiesto en `%LOCALAPPDATA%/FashionStore/backups`.
+El respaldo y los conteos por tabla usan el mismo snapshot. Restaura en una
+sola transacción y comprueba los registros. No utiliza `DROP`, `--clean`,
+ni reemplaza una base con datos.
 
-## Referencias verificadas
+`init` aplica las migraciones compatibles y asegura los roles base sobre la
+conexión directa de Neon. No ejecuta el seed ni restablece contraseñas.
+`check` muestra los conteos por tabla sin imprimir credenciales.
 
-- [Blueprint YAML de Render](https://render.com/docs/blueprint-spec)
-- [Variables de entorno](https://render.com/docs/configure-environment-variables)
-- [Límites del plan gratuito de Render](https://render.com/docs/free)
-- [Plan gratuito de Neon](https://neon.com/pricing)
-- [Compatibilidad de Angular y Node.js](https://angular.dev/reference/versions)
+No registrar operaciones locales durante el traslado final: los cambios
+posteriores al snapshot no estarán en la copia remota. Estos comandos no
+cambian automáticamente la conexión de la aplicación local.
+
+Si el destino ya contiene tablas, el comando se detiene. No borrar esos datos.
+Después de una copia exitosa se puede repetir `init` y `check`; para repetir
+el traslado completo se necesita otro destino vacío.
+
+Para empezar con una base nueva sin datos, ejecutar solo `init`. Esto no
+copia el catálogo ni crea usuarios demo. El seed es una alternativa deliberada
+para datos de demostración y modifica sus usuarios; no se ejecuta automáticamente.
+
+## 3. Crear la API en Vercel
+
+Importar el repositorio y configurar:
+
+| Campo | Valor |
+| --- | --- |
+| Proyecto sugerido | `fashionstore-api`, usando un nombre disponible |
+| Root Directory | `backend` |
+| Framework | FastAPI |
+| Python | 3.12, fijado en `.python-version` |
+| Production Branch | La rama preparada indicada arriba |
+| Build / Start | Detección de FastAPI; no usar un servidor `uvicorn` permanente |
+
+`backend/vercel.json` configura la función `main.py` con duración máxima de
+60 segundos. `.vercelignore` excluye entornos, bases locales, pruebas y reportes
+temporales del paquete. Las funciones tienen los límites del plan gratuito.
+
+Configurar estas variables en **Production** antes de desplegar:
+
+| Variable | Valor |
+| --- | --- |
+| `DATABASE_URL` | Conexión **pooled** de Neon con SSL |
+| `SECRET_KEY` | Secreto aleatorio de al menos 32 caracteres |
+| `AUTO_INIT_DB` | `false` |
+| `AUTO_SEED` | `false` |
+| `ALLOW_DEMO_PASSWORD_RESET` | `false` |
+| `BACKEND_CORS_ORIGINS` | Lista JSON con la URL HTTPS estable de la web |
+| `FRONTEND_URL` | URL HTTPS estable de la web |
+
+Generar el secreto localmente y guardarlo directamente en el panel.
+Vercel establece `VERCEL=1`: en ese entorno el código rechaza SQLite,
+secretos de desarrollo y creación automática del esquema. La API no mantiene
+un pool local de conexiones; Neon proporciona el pool externo.
+
+Crear ambos proyectos antes de publicar permite obtener sus dominios
+estables y configurar CORS sin adivinar URLs. Usar las URLs asignadas por
+Vercel: los nombres sugeridos pueden estar ocupados. No habilitar CORS
+comodín para admitir todas las URLs de preview.
+
+## 4. Crear la web en Vercel
+
+Importar el mismo repositorio como un segundo proyecto:
+
+| Campo | Valor |
+| --- | --- |
+| Proyecto sugerido | `fashionstore-web`, usando un nombre disponible |
+| Root Directory | `frontend-web` |
+| Framework | Angular |
+| Node.js | 24.x, fijado en `package.json` |
+| Install Command | `npm ci` |
+| Build Command | `npm run build` |
+| Output Directory | `browser/browser` |
+| Production Branch | La rama preparada indicada arriba |
+
+`frontend-web/vercel.json` incluye los comandos, rutas internas de Angular
+y cabeceras para actualizar la PWA.
+
+Variable en Production:
+
+```text
+FASHIONSTORE_API_URL=https://DOMINIO-REAL-API.vercel.app/api
+```
+
+El build genera `app-config.js` con esa URL pública. Rechaza la ausencia de
+la variable y las URLs relativas o sin HTTPS en Vercel. No publica secretos.
+No agregar `/api` al dominio de la web; solo a la conexión del backend.
+
+En el proyecto de la API, completar las variables con la URL real de la web:
+
+```text
+BACKEND_CORS_ORIGINS=["https://DOMINIO-REAL-WEB.vercel.app"]
+FRONTEND_URL=https://DOMINIO-REAL-WEB.vercel.app
+```
+
+Publicar primero la API y después la web. Cambiar variables requiere un nuevo
+despliegue; cambiar la URL de la API requiere reconstruir Angular.
+Usar el dominio de producción de la API: la protección de previews puede
+bloquear llamadas del navegador. Las rutas privadas de FashionStore siguen
+requiriendo su token de sesión propio.
+
+## 5. Verificar la instalación
+
+1. Abrir `https://DOMINIO-API/api/health`: `status=ok` y `database=ok`.
+2. Abrir la web, seleccionar la tienda y comprobar catálogo y sucursales.
+3. Iniciar sesión con un usuario migrado y comprobar una venta y su bitácora.
+4. Comprobar stock descontado, reembolso parcial/total y ventas netas.
+5. Descargar PDF/Excel y abrir una ruta interna directamente.
+6. Probar la cámara del vestidor en HTTPS y la instalación de la PWA.
+
+Los reportes se generan en memoria desde PostgreSQL y no necesitan persistir
+archivos en Vercel. Las funciones limitan el tamaño de las peticiones/respuestas;
+reportes muy grandes pueden necesitar otro método de descarga.
+Los pagos y reembolsos bancarios siguen simulados.
+
+## Android
+
+Desde `movil`, con el dominio real de la API publicado:
+
+```powershell
+flutter build apk --release --dart-define=API_URL=https://DOMINIO-REAL-API.vercel.app/api
+```
+
+El APK usa la misma API y base que la web; no se aloja en Vercel.
+
+## Referencias oficiales
+
+- [FastAPI en Vercel](https://vercel.com/docs/frameworks/backend/fastapi)
+- [Configuración](https://vercel.com/docs/project-configuration/vercel-json)
+- [Plan Hobby](https://vercel.com/docs/plans/hobby)
+- [Límites de funciones](https://vercel.com/docs/functions/limitations)
+- [Neon Free](https://neon.com/pricing)
+- [Conexiones directas y pooled](https://neon.com/docs/connect/connection-pooling)

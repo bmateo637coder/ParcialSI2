@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.angular/
+browser/
+e2e/
+*.log

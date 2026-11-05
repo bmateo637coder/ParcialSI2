@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,10 @@ class Settings(BaseSettings):
     # Por defecto usamos SQLite para que funcione sin configuración extra.
     # Para producción se puede sobrescribir con una URL de PostgreSQL.
     DATABASE_URL: str = "sqlite:///./fashionstore.db"
+    # Vercel inicia varias instancias: el esquema se prepara una sola vez,
+    # desde la herramienta de despliegue, no durante peticiones o builds.
+    VERCEL: bool = False
+    AUTO_INIT_DB: bool | None = None
 
     # Seguridad: leer el secreto desde el entorno SIEMPRE en producción.
     SECRET_KEY: str = "dev-secret-key-no-usar-en-produccion"
@@ -39,20 +44,35 @@ class Settings(BaseSettings):
     GENAI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
     GENAI_MODEL: str = "gemini-1.5-flash"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
+
+    @model_validator(mode="after")
+    def validate_hosted_settings(self):
+        if self.VERCEL:
+            if not self.DATABASE_URL.startswith(("postgres://", "postgresql://", "postgresql+psycopg2://")):
+                raise ValueError("En Vercel configura DATABASE_URL con PostgreSQL externo.")
+            if len(self.SECRET_KEY) < 32 or self.SECRET_KEY == "dev-secret-key-no-usar-en-produccion":
+                raise ValueError("En Vercel configura SECRET_KEY con un secreto aleatorio de al menos 32 caracteres.")
+            if self.auto_init_db:
+                raise ValueError("En Vercel usa AUTO_INIT_DB=false y prepara la base antes de desplegar.")
+        return self
+
+    @property
+    def auto_init_db(self) -> bool:
+        return self.AUTO_INIT_DB if self.AUTO_INIT_DB is not None else not self.VERCEL
 
     @property
     def sqlalchemy_database_url(self) -> str:
         """URL de base de datos lista para SQLAlchemy.
 
-        Railway inyecta ``DATABASE_URL`` con el esquema ``postgres://``
-        (sin driver). SQLAlchemy lo acepta, pero se normaliza a
-        ``postgresql+psycopg2://`` para fijar el driver explícitamente y
-        evitar sorpresas entre proveedores.
+        Normaliza las cadenas de PostgreSQL de los proveedores para usar
+        explícitamente el driver instalado, psycopg2.
         """
         url = self.DATABASE_URL
         if url.startswith("postgres://"):
             url = "postgresql+psycopg2://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg2://" + url[len("postgresql://"):]
         return url
 
     @property

@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import os
 
 from app.api import (
@@ -17,7 +16,6 @@ from app.api import (
 )
 from app.api.v1.endpoints import plataforma, sync
 from app.api import ia_reportes, analitica_ml
-from app.api.ia_reportes import DOWNLOADS_DIR
 from app.api import audit
 from app.services import audit as audit_service
 from app.core.config import settings
@@ -32,7 +30,8 @@ from app.models import (
     user,
 )
 
-Base.metadata.create_all(bind=engine)
+if settings.auto_init_db:
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -41,7 +40,6 @@ app = FastAPI(
 )
 
 
-@app.on_event("startup")
 def _ensure_roles():
     """Garantiza que los roles base existan al arrancar."""
     from app.core.database import SessionLocal
@@ -118,15 +116,17 @@ def _ensure_plans(db):
 
 
 @app.on_event("startup")
-def _seed_initial_data():
-    """Siembra los datos demo si AUTO_SEED está habilitado (Railway).
+def _initialize_local_database():
+    if settings.auto_init_db:
+        _ensure_roles()
 
-    La función de seed es idempotente: no duplica registros existentes.
-    Puede ejecutarse manualmente con ``python seed.py`` en local.
-    """
+
+@app.on_event("startup")
+def _seed_initial_data():
+    """Datos demo opcionales en desarrollo; nunca en instancias serverless."""
     import os
 
-    if os.getenv("AUTO_SEED", "").strip().lower() not in {"1", "true", "yes"}:
+    if settings.VERCEL or not settings.auto_init_db or os.getenv("AUTO_SEED", "").strip().lower() not in {"1", "true", "yes"}:
         return
     from seed import seed_db
 

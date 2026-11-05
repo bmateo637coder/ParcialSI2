@@ -17,7 +17,13 @@ function apiUrl(value) {
 if (require.main === module) {
   const localEnv = path.resolve(__dirname, '../.env');
   if (fs.existsSync(localEnv)) process.loadEnvFile(localEnv);
+  if (process.env.VERCEL === '1' && !process.env.FASHIONSTORE_API_URL?.trim()) {
+    throw new Error('Configura FASHIONSTORE_API_URL con la URL HTTPS de la API antes de desplegar la web.');
+  }
   const config = { apiUrl: apiUrl(process.env.FASHIONSTORE_API_URL) };
+  if (process.env.VERCEL === '1' && !config.apiUrl.startsWith('https://')) {
+    throw new Error('En Vercel, FASHIONSTORE_API_URL debe apuntar a la API publicada con HTTPS.');
+  }
   fs.writeFileSync(path.resolve(__dirname, '../public/app-config.js'),
     'globalThis.__FASHIONSTORE_CONFIG__ = ' + JSON.stringify(config).replace(/</g, '\\u003c') + ';\n');
   console.log('Configuración pública del backend preparada.');

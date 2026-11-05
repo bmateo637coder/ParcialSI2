@@ -14,6 +14,10 @@ backend/venv/
 .env.production
 .env.*
 !.env.example
+!.env.*.example
+.vercel/
+.neon/
+.neonctl/
 
 # --- Node / Frontend ---
 node_modules/
